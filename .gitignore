@@ -218,3 +218,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials
+
+# Python virtual environments
+.venv/
+__pycache__/
+*.py[cod]
+
+# Security audit logs
+logs/*
+!logs/.gitkeep
