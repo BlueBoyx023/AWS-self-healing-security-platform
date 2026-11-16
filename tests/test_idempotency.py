@@ -95,18 +95,14 @@ class TestIdempotency(unittest.TestCase):
         self.assertEqual(results.count(True), 1)
         self.assertEqual(results.count(False), 9)
 
-
     def test_concurrent_retry_claim_only_one_succeeds(self):
         event_id = "event-retry-concurrent-001"
 
-        # Initial claim and simulated failure.
         self.assertTrue(self.store.claim_event(event_id))
         self.store.fail_event(event_id)
 
-        # Explicitly authorize a retry.
         self.assertTrue(self.store.reset_event(event_id))
 
-        # Ten workers attempt to claim the same retry.
         with ThreadPoolExecutor(max_workers=10) as executor:
             results = list(
                 executor.map(
@@ -115,11 +111,9 @@ class TestIdempotency(unittest.TestCase):
                 )
             )
 
-        # Exactly one worker must succeed.
         self.assertEqual(results.count(True), 1)
         self.assertEqual(results.count(False), 9)
 
-        # The event must now be IN_PROGRESS.
         self.assertEqual(
             self.store.get_status(event_id),
             EventStatus.IN_PROGRESS,
@@ -222,13 +216,16 @@ class TestIdempotency(unittest.TestCase):
         self.assertIsNotNone(new_token)
 
         with self.assertRaises(PermissionError):
-            self.store.complete_event_owned(event_id, old_token)
+            self.store.complete_event_owned(
+                event_id,
+                old_token,
+            )
 
         self.store.complete_event_owned(
-    event_id,
-    new_token,
-    now=111,
-)
+            event_id,
+            new_token,
+            now=111,
+        )
 
         self.assertEqual(
             self.store.get_status(event_id),
@@ -254,6 +251,54 @@ class TestIdempotency(unittest.TestCase):
         self.assertEqual(
             self.store.get_status(event_id),
             EventStatus.IN_PROGRESS,
+        )
+
+    def test_old_owner_cannot_fail_event_after_lease_recovery(self):
+        event_id = "recovered-owner-001"
+
+        # Worker A claims the event.
+        old_token = self.store.claim_event_with_lease(
+            event_id,
+            lease_seconds=10,
+            now=100,
+        )
+
+        self.assertIsNotNone(old_token)
+
+        # Worker B recovers the expired lease.
+        new_token = self.store.recover_stale_event(
+            event_id,
+            lease_seconds=10,
+            now=110,
+        )
+
+        self.assertIsNotNone(new_token)
+        self.assertNotEqual(old_token, new_token)
+
+        # Worker A attempts to fail the event with its stale token.
+        with self.assertRaises(PermissionError):
+            self.store.fail_event_owned(
+                event_id,
+                old_token,
+                now=111,
+            )
+
+        # Worker B must still own the event.
+        self.assertEqual(
+            self.store.get_status(event_id),
+            EventStatus.IN_PROGRESS,
+        )
+
+        # Worker B can legitimately fail the event.
+        self.store.fail_event_owned(
+            event_id,
+            new_token,
+            now=112,
+        )
+
+        self.assertEqual(
+            self.store.get_status(event_id),
+            EventStatus.FAILED,
         )
 
     def test_valid_owner_can_fail_event(self):
@@ -307,6 +352,7 @@ class TestIdempotency(unittest.TestCase):
         self.assertEqual(len(results), 10)
 
         self.assertNotEqual(successful_tokens[0], old_token)
+
 
 if __name__ == "__main__":
     unittest.main()
