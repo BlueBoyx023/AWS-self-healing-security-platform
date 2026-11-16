@@ -21,13 +21,17 @@ class TestIdempotency(unittest.TestCase):
     def setUp(self):
         self.store = IdempotencyStore()
 
+    # --------------------------------------------------
+    # BASIC IDEMPOTENCY TESTS
+    # --------------------------------------------------
+
     def test_first_event_accepted(self):
         result = self.store.claim_event("event-001")
 
         self.assertTrue(result)
         self.assertEqual(
             self.store.get_status("event-001"),
-            EventStatus.IN_PROGRESS
+            EventStatus.IN_PROGRESS,
         )
 
     def test_duplicate_event_rejected(self):
@@ -46,7 +50,7 @@ class TestIdempotency(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(
             self.store.get_status("event-001"),
-            EventStatus.COMPLETED
+            EventStatus.COMPLETED,
         )
 
     def test_failed_event_can_be_retried(self):
@@ -55,7 +59,7 @@ class TestIdempotency(unittest.TestCase):
 
         self.assertEqual(
             self.store.get_status("event-001"),
-            EventStatus.FAILED
+            EventStatus.FAILED,
         )
 
         self.assertTrue(
@@ -81,6 +85,10 @@ class TestIdempotency(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.store.claim_event(event_id)
 
+    # --------------------------------------------------
+    # CONCURRENT CLAIM TESTS
+    # --------------------------------------------------
+
     def test_concurrent_duplicate_claim(self):
         event_id = "event-concurrent-001"
 
@@ -88,7 +96,7 @@ class TestIdempotency(unittest.TestCase):
             results = list(
                 executor.map(
                     self.store.claim_event,
-                    [event_id] * 10
+                    [event_id] * 10,
                 )
             )
 
@@ -119,6 +127,10 @@ class TestIdempotency(unittest.TestCase):
             EventStatus.IN_PROGRESS,
         )
 
+    # --------------------------------------------------
+    # INVALID STATE TRANSITION TESTS
+    # --------------------------------------------------
+
     def test_unclaimed_event_cannot_be_completed(self):
         with self.assertRaises(ValueError):
             self.store.complete_event("unclaimed-event-001")
@@ -147,6 +159,10 @@ class TestIdempotency(unittest.TestCase):
             self.store.get_status(event_id),
             EventStatus.COMPLETED,
         )
+
+    # --------------------------------------------------
+    # LEASE MANAGEMENT TESTS
+    # --------------------------------------------------
 
     def test_active_lease_cannot_be_recovered(self):
         event_id = "active-lease-001"
@@ -196,6 +212,10 @@ class TestIdempotency(unittest.TestCase):
             self.store.get_status(event_id),
             EventStatus.IN_PROGRESS,
         )
+
+    # --------------------------------------------------
+    # OWNERSHIP VALIDATION TESTS
+    # --------------------------------------------------
 
     def test_old_owner_cannot_complete_recovered_event(self):
         event_id = "stale-owner-001"
@@ -310,6 +330,8 @@ class TestIdempotency(unittest.TestCase):
             now=100,
         )
 
+        self.assertIsNotNone(owner_token)
+
         self.store.fail_event_owned(
             event_id,
             owner_token,
@@ -320,6 +342,107 @@ class TestIdempotency(unittest.TestCase):
             self.store.get_status(event_id),
             EventStatus.FAILED,
         )
+
+    # --------------------------------------------------
+    # ADDITIONAL ADVERSARIAL FAILURE TESTS
+    # --------------------------------------------------
+
+    def test_unknown_event_cannot_be_failed_by_owner(self):
+        with self.assertRaises(PermissionError):
+            self.store.fail_event_owned(
+                "unknown-event-001",
+                "unknown-token",
+                now=100,
+            )
+
+        self.assertIsNone(
+            self.store.get_status("unknown-event-001")
+        )
+
+    def test_invalid_owner_token_cannot_fail_event(self):
+        event_id = "invalid-owner-001"
+
+        valid_token = self.store.claim_event_with_lease(
+            event_id,
+            lease_seconds=10,
+            now=100,
+        )
+
+        self.assertIsNotNone(valid_token)
+
+        with self.assertRaises(PermissionError):
+            self.store.fail_event_owned(
+                event_id,
+                "incorrect-owner-token",
+                now=105,
+            )
+
+        self.assertEqual(
+            self.store.get_status(event_id),
+            EventStatus.IN_PROGRESS,
+        )
+
+    def test_completed_event_cannot_be_failed(self):
+        event_id = "completed-failure-001"
+
+        owner_token = self.store.claim_event_with_lease(
+            event_id,
+            lease_seconds=10,
+            now=100,
+        )
+
+        self.assertIsNotNone(owner_token)
+
+        self.store.complete_event_owned(
+            event_id,
+            owner_token,
+            now=105,
+        )
+
+        with self.assertRaises(PermissionError):
+            self.store.fail_event_owned(
+                event_id,
+                owner_token,
+                now=106,
+            )
+
+        self.assertEqual(
+            self.store.get_status(event_id),
+            EventStatus.COMPLETED,
+        )
+
+    def test_failed_event_cannot_be_failed_again(self):
+        event_id = "repeated-failure-001"
+
+        owner_token = self.store.claim_event_with_lease(
+            event_id,
+            lease_seconds=10,
+            now=100,
+        )
+
+        self.assertIsNotNone(owner_token)
+
+        self.store.fail_event_owned(
+            event_id,
+            owner_token,
+            now=105,
+        )
+
+        with self.assertRaises(PermissionError):
+            self.store.fail_event_owned(
+                event_id,
+                owner_token,
+                now=106,
+            )
+
+        self.assertEqual(
+            self.store.get_status(event_id),
+            EventStatus.FAILED,
+        )
+
+    # --------------------------------------------------
+    # CONCURRENT LEASE RECOVERY TEST
+    # --------------------------------------------------
 
     def test_concurrent_stale_recovery_only_one_owner(self):
         event_id = "concurrent-recovery-001"
