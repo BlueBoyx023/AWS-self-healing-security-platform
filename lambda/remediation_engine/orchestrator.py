@@ -6,7 +6,7 @@ Centralized Security Orchestrator
 
 Coordinates:
 1. Security event validation
-2. Idempotency protection
+2. Lease-based idempotency protection
 3. Remediation policy evaluation
 4. Automated S3 remediation
 5. Post-remediation verification
@@ -14,9 +14,7 @@ Coordinates:
 7. CloudWatch security metrics
 
 Dry-run mode is enabled by default.
-
-The default in-memory idempotency store is for local
-development only. Production requires durable storage.
+The default in-memory idempotency store is for local development.
 """
 
 from typing import Any
@@ -51,6 +49,7 @@ def _record_metric_safely(
     bucket_name: str = "unknown",
     environment: str = "development",
 ) -> bool:
+    """Record a metric without allowing metric failures to stop remediation."""
 
     if cloudwatch_client is None:
         return False
@@ -76,6 +75,7 @@ def _write_audit_record(
     verification_status: str | None = None,
     error: str | None = None,
 ) -> dict[str, Any]:
+    """Write a structured audit record."""
 
     return write_audit_record(
         event_id=event_id,
@@ -96,6 +96,7 @@ def _build_error_response(
     bucket_name: str | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
+    """Build a standardized workflow error response."""
 
     response = handle_error(error)
     response["status"] = status
@@ -111,6 +112,7 @@ def _build_error_response(
 def _audit_and_update(
     store: IdempotencyStore,
     event_id: str,
+    owner_token: str,
     *,
     event_type: str,
     resource_type: str,
@@ -121,7 +123,12 @@ def _audit_and_update(
     verification_status: str | None = None,
     error: str | None = None,
 ) -> None:
-    """Persist audit evidence before changing the event state."""
+    """
+    Persist audit evidence before updating the owned event state.
+
+    Only the worker holding the valid lease ownership token
+    can complete or fail the event.
+    """
 
     try:
         _write_audit_record(
@@ -134,14 +141,15 @@ def _audit_and_update(
             verification_status=verification_status,
             error=error,
         )
+
     except Exception:
-        store.fail_event(event_id)
+        store.fail_event_owned(event_id, owner_token)
         raise
 
     if completed:
-        store.complete_event(event_id)
+        store.complete_event_owned(event_id, owner_token)
     else:
-        store.fail_event(event_id)
+        store.fail_event_owned(event_id, owner_token)
 
 
 def process_security_event(
@@ -161,6 +169,8 @@ def process_security_event(
 
     Audit logging is mandatory.
     CloudWatch metrics are optional and fail safely.
+
+    Event ownership is managed using time-limited leases.
     """
 
     store = (
@@ -228,9 +238,13 @@ def process_security_event(
 
         return response
 
-    # STEP 2: Claim event ID.
+    # STEP 2: Claim event ID using a time-limited lease.
     try:
-        claimed = store.claim_event(event_id)
+        owner_token = store.claim_event_with_lease(
+            event_id,
+            lease_seconds=60,
+        )
+
     except Exception as error:
         return _build_error_response(
             error=error,
@@ -239,7 +253,7 @@ def process_security_event(
             bucket_name=bucket_name,
         )
 
-    if not claimed:
+    if owner_token is None:
         return {
             "status": "DUPLICATE",
             "stage": "IDEMPOTENCY",
@@ -274,6 +288,7 @@ def process_security_event(
         _audit_and_update(
             store,
             event_id,
+            owner_token,
             event_type=event_type,
             resource_type=resource_type,
             resource_id=bucket_name,
@@ -311,6 +326,7 @@ def process_security_event(
         _audit_and_update(
             store,
             event_id,
+            owner_token,
             event_type=event_type,
             resource_type=resource_type,
             resource_id=bucket_name,
@@ -353,6 +369,7 @@ def process_security_event(
         _audit_and_update(
             store,
             event_id,
+            owner_token,
             event_type=event_type,
             resource_type=resource_type,
             resource_id=bucket_name,
@@ -391,6 +408,7 @@ def process_security_event(
         _audit_and_update(
             store,
             event_id,
+            owner_token,
             event_type=event_type,
             resource_type=resource_type,
             resource_id=bucket_name,
@@ -414,6 +432,7 @@ def process_security_event(
         _audit_and_update(
             store,
             event_id,
+            owner_token,
             event_type=event_type,
             resource_type=resource_type,
             resource_id=bucket_name,
@@ -461,6 +480,7 @@ def process_security_event(
         _audit_and_update(
             store,
             event_id,
+            owner_token,
             event_type=event_type,
             resource_type=resource_type,
             resource_id=bucket_name,
@@ -504,6 +524,7 @@ def process_security_event(
     _audit_and_update(
         store,
         event_id,
+        owner_token,
         event_type=event_type,
         resource_type=resource_type,
         resource_id=bucket_name,
