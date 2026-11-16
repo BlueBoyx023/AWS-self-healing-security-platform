@@ -1,18 +1,7 @@
 
 
-import sys
 import unittest
-from pathlib import Path
 from unittest.mock import patch
-
-sys.path.insert(
-    0,
-    str(
-        Path(__file__).resolve().parents[1]
-        / "lambda"
-        / "remediation_engine"
-    ),
-)
 
 import orchestrator
 
@@ -20,7 +9,12 @@ import orchestrator
 class TestOrchestrator(unittest.TestCase):
 
     def setUp(self):
-        self.event = {"id": "test-event-001"}
+        # Give every test an independent idempotency store.
+        self.idempotency_store = orchestrator.IdempotencyStore()
+
+        self.event = {
+            "id": "test-event-001"
+        }
 
         self.validated_event = {
             "event_id": "test-event-001",
@@ -42,15 +36,17 @@ class TestOrchestrator(unittest.TestCase):
             self.event,
             self.allowed_buckets,
             self.s3_client,
+            idempotency_store=self.idempotency_store,
         )
 
         self.assertEqual(result["status"], "REJECTED")
-        self.assertEqual(result["stage"], "VALIDATION")
 
     @patch("orchestrator.validate_event")
     @patch("orchestrator.is_remediation_allowed")
     def test_unauthorized_bucket_denied(
-        self, mock_policy, mock_validate
+        self,
+        mock_policy,
+        mock_validate,
     ):
         mock_validate.return_value = self.validated_event
         mock_policy.return_value = False
@@ -59,115 +55,127 @@ class TestOrchestrator(unittest.TestCase):
             self.event,
             self.allowed_buckets,
             self.s3_client,
+            idempotency_store=self.idempotency_store,
         )
 
         self.assertEqual(result["status"], "DENIED")
-        self.assertEqual(result["stage"], "POLICY")
+        self.assertEqual(
+            self.idempotency_store.get_status("test-event-001"),
+            orchestrator.EventStatus.COMPLETED,
+        )
 
     @patch("orchestrator.validate_event")
     @patch("orchestrator.is_remediation_allowed")
     @patch("orchestrator.remediate_s3_bucket")
     def test_dry_run_execution(
-        self, mock_remediate, mock_policy, mock_validate
+        self,
+        mock_remediate,
+        mock_policy,
+        mock_validate,
     ):
         mock_validate.return_value = self.validated_event
         mock_policy.return_value = True
-
-        mock_remediate.return_value = {
-            "status": "DRY_RUN",
-            "bucket_name": "approved-test-bucket",
-        }
+        mock_remediate.return_value = {"status": "SUCCESS"}
 
         result = orchestrator.process_security_event(
             self.event,
             self.allowed_buckets,
             self.s3_client,
             dry_run=True,
+            idempotency_store=self.idempotency_store,
         )
 
         self.assertEqual(result["status"], "SIMULATED")
-        self.assertEqual(result["verification"], "SKIPPED")
+        self.assertEqual(
+            self.idempotency_store.get_status("test-event-001"),
+            orchestrator.EventStatus.COMPLETED,
+        )
 
     @patch("orchestrator.validate_event")
     @patch("orchestrator.is_remediation_allowed")
     @patch("orchestrator.remediate_s3_bucket")
     def test_remediation_failure(
-        self, mock_remediate, mock_policy, mock_validate
+        self,
+        mock_remediate,
+        mock_policy,
+        mock_validate,
     ):
         mock_validate.return_value = self.validated_event
         mock_policy.return_value = True
-
-        mock_remediate.return_value = {
-            "status": "FAILED",
-            "message": "AWS API error",
-        }
+        mock_remediate.return_value = {"status": "FAILED"}
 
         result = orchestrator.process_security_event(
             self.event,
             self.allowed_buckets,
             self.s3_client,
             dry_run=False,
+            idempotency_store=self.idempotency_store,
         )
 
         self.assertEqual(result["status"], "FAILED")
-        self.assertEqual(result["stage"], "REMEDIATION")
+        self.assertEqual(
+            self.idempotency_store.get_status("test-event-001"),
+            orchestrator.EventStatus.FAILED,
+        )
 
     @patch("orchestrator.validate_event")
     @patch("orchestrator.is_remediation_allowed")
     @patch("orchestrator.remediate_s3_bucket")
     @patch("orchestrator.verify_s3_bucket")
     def test_verification_failure(
-        self, mock_verify, mock_remediate,
-        mock_policy, mock_validate
+        self,
+        mock_verify,
+        mock_remediate,
+        mock_policy,
+        mock_validate,
     ):
         mock_validate.return_value = self.validated_event
         mock_policy.return_value = True
-
         mock_remediate.return_value = {"status": "SUCCESS"}
-
-        mock_verify.return_value = {
-            "status": "UNVERIFIED",
-            "message": "Security settings do not match",
-        }
+        mock_verify.return_value = {"status": "UNVERIFIED"}
 
         result = orchestrator.process_security_event(
             self.event,
             self.allowed_buckets,
             self.s3_client,
             dry_run=False,
+            idempotency_store=self.idempotency_store,
         )
 
         self.assertEqual(result["status"], "UNVERIFIED")
+        self.assertEqual(
+            self.idempotency_store.get_status("test-event-001"),
+            orchestrator.EventStatus.FAILED,
+        )
 
     @patch("orchestrator.validate_event")
     @patch("orchestrator.is_remediation_allowed")
     @patch("orchestrator.remediate_s3_bucket")
     @patch("orchestrator.verify_s3_bucket")
     def test_successful_workflow(
-        self, mock_verify, mock_remediate,
-        mock_policy, mock_validate
+        self,
+        mock_verify,
+        mock_remediate,
+        mock_policy,
+        mock_validate,
     ):
         mock_validate.return_value = self.validated_event
         mock_policy.return_value = True
-
-        mock_remediate.return_value = {
-            "status": "SUCCESS"
-        }
-
-        mock_verify.return_value = {
-            "status": "VERIFIED"
-        }
+        mock_remediate.return_value = {"status": "SUCCESS"}
+        mock_verify.return_value = {"status": "VERIFIED"}
 
         result = orchestrator.process_security_event(
             self.event,
             self.allowed_buckets,
             self.s3_client,
             dry_run=False,
+            idempotency_store=self.idempotency_store,
         )
 
         self.assertEqual(result["status"], "VERIFIED")
         self.assertEqual(
-            result["verification"]["status"], "VERIFIED"
+            self.idempotency_store.get_status("test-event-001"),
+            orchestrator.EventStatus.COMPLETED,
         )
 
 

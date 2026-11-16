@@ -1,17 +1,22 @@
 
+
 """
 AWS Self-Healing Security Platform
 Centralized Security Orchestrator
 
 Coordinates:
 1. Security event validation
-2. Remediation policy evaluation
-3. Automated S3 remediation
-4. Post-remediation verification
-5. Structured audit logging
-6. CloudWatch security metrics
+2. Idempotency protection
+3. Remediation policy evaluation
+4. Automated S3 remediation
+5. Post-remediation verification
+6. Structured audit logging
+7. CloudWatch security metrics
 
 Dry-run mode is enabled by default.
+
+The default in-memory idempotency store is for local
+development only. Production requires durable storage.
 """
 
 from typing import Any
@@ -24,6 +29,8 @@ from verification_engine import verify_s3_bucket
 from audit_logger import write_audit_record
 from metrics import record_security_event
 
+from idempotency import IdempotencyStore, EventStatus
+
 from error_handler import (
     ValidationError,
     AuthorizationError,
@@ -33,13 +40,17 @@ from error_handler import (
 )
 
 
+# Local development store.
+# Pass an explicit store to process_security_event for isolated tests.
+_DEFAULT_IDEMPOTENCY_STORE = IdempotencyStore()
+
+
 def _record_metric_safely(
     cloudwatch_client: Any,
     event_type: str,
     bucket_name: str = "unknown",
     environment: str = "development",
 ) -> bool:
-    """Publish CloudWatch metrics without interrupting security controls."""
 
     if cloudwatch_client is None:
         return False
@@ -65,10 +76,6 @@ def _write_audit_record(
     verification_status: str | None = None,
     error: str | None = None,
 ) -> dict[str, Any]:
-    """Persist a structured audit record.
-
-    Audit persistence failures are propagated to the caller.
-    """
 
     return write_audit_record(
         event_id=event_id,
@@ -91,7 +98,6 @@ def _build_error_response(
 ) -> dict[str, Any]:
 
     response = handle_error(error)
-
     response["status"] = status
     response["stage"] = stage
 
@@ -99,8 +105,43 @@ def _build_error_response(
         response["bucket_name"] = bucket_name
 
     response.update(extra)
-
     return response
+
+
+def _audit_and_update(
+    store: IdempotencyStore,
+    event_id: str,
+    *,
+    event_type: str,
+    resource_type: str,
+    resource_id: str,
+    action: str,
+    status: str,
+    completed: bool,
+    verification_status: str | None = None,
+    error: str | None = None,
+) -> None:
+    """Persist audit evidence before changing the event state."""
+
+    try:
+        _write_audit_record(
+            event_id=event_id,
+            event_type=event_type,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            action=action,
+            status=status,
+            verification_status=verification_status,
+            error=error,
+        )
+    except Exception:
+        store.fail_event(event_id)
+        raise
+
+    if completed:
+        store.complete_event(event_id)
+    else:
+        store.fail_event(event_id)
 
 
 def process_security_event(
@@ -110,13 +151,23 @@ def process_security_event(
     dry_run: bool = True,
     cloudwatch_client: Any = None,
     environment: str = "development",
+    idempotency_store: Any = None,
 ) -> dict[str, Any]:
     """
     Execute the complete AWS security remediation workflow.
 
-    Audit logging is mandatory for workflow outcomes.
+    Duplicate events are rejected before policy evaluation
+    and remediation.
+
+    Audit logging is mandatory.
     CloudWatch metrics are optional and fail safely.
     """
+
+    store = (
+        idempotency_store
+        if idempotency_store is not None
+        else _DEFAULT_IDEMPOTENCY_STORE
+    )
 
     event_id = (
         str(event.get("id", "unknown"))
@@ -129,7 +180,7 @@ def process_security_event(
     action = "BLOCK_PUBLIC_ACCESS"
     event_type = "SECURITY_FINDING"
 
-    # STEP 1: Validate incoming security event
+    # STEP 1: Validate incoming security event.
     try:
         validated_event = validate_event(event)
 
@@ -177,7 +228,27 @@ def process_security_event(
 
         return response
 
-    # STEP 2: Evaluate remediation authorization
+    # STEP 2: Claim event ID.
+    try:
+        claimed = store.claim_event(event_id)
+    except Exception as error:
+        return _build_error_response(
+            error=error,
+            status="FAILED",
+            stage="IDEMPOTENCY",
+            bucket_name=bucket_name,
+        )
+
+    if not claimed:
+        return {
+            "status": "DUPLICATE",
+            "stage": "IDEMPOTENCY",
+            "event_id": event_id,
+            "bucket_name": bucket_name,
+            "message": "Event has already been claimed or processed.",
+        }
+
+    # STEP 3: Evaluate remediation authorization.
     try:
         authorized = is_remediation_allowed(
             resource_type=resource_type,
@@ -200,13 +271,15 @@ def process_security_event(
             bucket_name=bucket_name,
         )
 
-        _write_audit_record(
-            event_id=event_id,
+        _audit_and_update(
+            store,
+            event_id,
             event_type=event_type,
             resource_type=resource_type,
             resource_id=bucket_name,
             action=action,
             status="FAILED",
+            completed=False,
             error="Policy evaluation failed",
         )
 
@@ -235,19 +308,21 @@ def process_security_event(
             bucket_name=bucket_name,
         )
 
-        _write_audit_record(
-            event_id=event_id,
+        _audit_and_update(
+            store,
+            event_id,
             event_type=event_type,
             resource_type=resource_type,
             resource_id=bucket_name,
             action=action,
             status="DENIED",
+            completed=True,
             error="Resource not authorized",
         )
 
         return response
 
-    # STEP 3: Execute S3 remediation
+    # STEP 4: Execute S3 remediation.
     try:
         remediation_result = remediate_s3_bucket(
             bucket_name=bucket_name,
@@ -265,9 +340,7 @@ def process_security_event(
 
         remediation_error = RemediationExecutionError(
             "S3 remediation execution failed.",
-            details={
-                "bucket_name": bucket_name,
-            },
+            details={"bucket_name": bucket_name},
         )
 
         response = _build_error_response(
@@ -277,13 +350,15 @@ def process_security_event(
             bucket_name=bucket_name,
         )
 
-        _write_audit_record(
-            event_id=event_id,
+        _audit_and_update(
+            store,
+            event_id,
             event_type=event_type,
             resource_type=resource_type,
             resource_id=bucket_name,
             action=action,
             status="FAILED",
+            completed=False,
             error="Remediation execution failed",
         )
 
@@ -313,19 +388,21 @@ def process_security_event(
             remediation=remediation_result,
         )
 
-        _write_audit_record(
-            event_id=event_id,
+        _audit_and_update(
+            store,
+            event_id,
             event_type=event_type,
             resource_type=resource_type,
             resource_id=bucket_name,
             action=action,
             status="FAILED",
+            completed=False,
             error="Remediation returned failure",
         )
 
         return response
 
-    # STEP 4: Handle dry-run execution
+    # STEP 5: Handle dry-run execution.
     if dry_run:
         _record_metric_safely(
             cloudwatch_client,
@@ -334,13 +411,15 @@ def process_security_event(
             environment,
         )
 
-        _write_audit_record(
-            event_id=event_id,
+        _audit_and_update(
+            store,
+            event_id,
             event_type=event_type,
             resource_type=resource_type,
             resource_id=bucket_name,
             action=action,
             status="DRY_RUN",
+            completed=True,
             verification_status="SKIPPED",
         )
 
@@ -351,7 +430,7 @@ def process_security_event(
             "verification": "SKIPPED",
         }
 
-    # STEP 5: Verify resulting S3 configuration
+    # STEP 6: Verify resulting S3 configuration.
     try:
         verification_result = verify_s3_bucket(
             bucket_name=bucket_name,
@@ -368,9 +447,7 @@ def process_security_event(
 
         verification_error = VerificationError(
             "Post-remediation verification failed.",
-            details={
-                "bucket_name": bucket_name,
-            },
+            details={"bucket_name": bucket_name},
         )
 
         response = _build_error_response(
@@ -381,25 +458,28 @@ def process_security_event(
             remediation=remediation_result,
         )
 
-        _write_audit_record(
-            event_id=event_id,
+        _audit_and_update(
+            store,
+            event_id,
             event_type=event_type,
             resource_type=resource_type,
             resource_id=bucket_name,
             action=action,
             status="FAILED",
+            completed=False,
             verification_status="UNVERIFIED",
             error="Verification execution failed",
         )
 
         return response
 
-    # STEP 6: Record verification outcome
+    # STEP 7: Record verification outcome.
     verification_status = verification_result.get("status")
 
     if verification_status in ("SUCCESS", "VERIFIED"):
         final_status = verification_status
         audit_status = verification_status
+        completed = True
 
         _record_metric_safely(
             cloudwatch_client,
@@ -411,6 +491,7 @@ def process_security_event(
     else:
         final_status = "UNVERIFIED"
         audit_status = "UNVERIFIED"
+        completed = False
 
         _record_metric_safely(
             cloudwatch_client,
@@ -419,18 +500,20 @@ def process_security_event(
             environment,
         )
 
-    # STEP 7: Persist final audit record
-    _write_audit_record(
-        event_id=event_id,
+    # STEP 8: Persist audit record and update event state.
+    _audit_and_update(
+        store,
+        event_id,
         event_type=event_type,
         resource_type=resource_type,
         resource_id=bucket_name,
         action=action,
         status=audit_status,
+        completed=completed,
         verification_status=verification_status,
     )
 
-    # STEP 8: Return final workflow outcome
+    # STEP 9: Return final workflow outcome.
     return {
         "status": final_status,
         "bucket_name": bucket_name,
