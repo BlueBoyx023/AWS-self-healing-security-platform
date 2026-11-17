@@ -7,10 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-REMEDIATION_PATH = (
-    PROJECT_ROOT / "lambda" / "remediation_engine"
-)
-
+REMEDIATION_PATH = PROJECT_ROOT / "lambda" / "remediation_engine"
 sys.path.insert(0, str(REMEDIATION_PATH))
 
 from idempotency import IdempotencyStore, EventStatus
@@ -26,49 +23,51 @@ class TestIdempotency(unittest.TestCase):
     # --------------------------------------------------
 
     def test_first_event_accepted(self):
-        result = self.store.claim_event("event-001")
+        event_id = "event-001"
+
+        result = self.store.claim_event(event_id)
 
         self.assertTrue(result)
         self.assertEqual(
-            self.store.get_status("event-001"),
+            self.store.get_status(event_id),
             EventStatus.IN_PROGRESS,
         )
 
     def test_duplicate_event_rejected(self):
-        self.store.claim_event("event-001")
+        event_id = "event-001"
 
-        result = self.store.claim_event("event-001")
+        self.store.claim_event(event_id)
+        result = self.store.claim_event(event_id)
 
         self.assertFalse(result)
 
     def test_completed_event_rejected(self):
-        self.store.claim_event("event-001")
-        self.store.complete_event("event-001")
+        event_id = "event-001"
 
-        result = self.store.claim_event("event-001")
+        self.store.claim_event(event_id)
+        self.store.complete_event(event_id)
+
+        result = self.store.claim_event(event_id)
 
         self.assertFalse(result)
         self.assertEqual(
-            self.store.get_status("event-001"),
+            self.store.get_status(event_id),
             EventStatus.COMPLETED,
         )
 
     def test_failed_event_can_be_retried(self):
-        self.store.claim_event("event-001")
-        self.store.fail_event("event-001")
+        event_id = "event-001"
+
+        self.store.claim_event(event_id)
+        self.store.fail_event(event_id)
 
         self.assertEqual(
-            self.store.get_status("event-001"),
+            self.store.get_status(event_id),
             EventStatus.FAILED,
         )
 
-        self.assertTrue(
-            self.store.reset_event("event-001")
-        )
-
-        self.assertTrue(
-            self.store.claim_event("event-001")
-        )
+        self.assertTrue(self.store.reset_event(event_id))
+        self.assertTrue(self.store.claim_event(event_id))
 
     def test_different_event_ids_accepted(self):
         first = self.store.claim_event("event-001")
@@ -108,7 +107,6 @@ class TestIdempotency(unittest.TestCase):
 
         self.assertTrue(self.store.claim_event(event_id))
         self.store.fail_event(event_id)
-
         self.assertTrue(self.store.reset_event(event_id))
 
         with ThreadPoolExecutor(max_workers=10) as executor:
@@ -132,20 +130,20 @@ class TestIdempotency(unittest.TestCase):
     # --------------------------------------------------
 
     def test_unclaimed_event_cannot_be_completed(self):
-        with self.assertRaises(ValueError):
-            self.store.complete_event("unclaimed-event-001")
+        event_id = "unclaimed-event-001"
 
-        self.assertIsNone(
-            self.store.get_status("unclaimed-event-001")
-        )
+        with self.assertRaises(ValueError):
+            self.store.complete_event(event_id)
+
+        self.assertIsNone(self.store.get_status(event_id))
 
     def test_unclaimed_event_cannot_be_failed(self):
-        with self.assertRaises(ValueError):
-            self.store.fail_event("unclaimed-event-002")
+        event_id = "unclaimed-event-002"
 
-        self.assertIsNone(
-            self.store.get_status("unclaimed-event-002")
-        )
+        with self.assertRaises(ValueError):
+            self.store.fail_event(event_id)
+
+        self.assertIsNone(self.store.get_status(event_id))
 
     def test_completed_event_cannot_be_reset(self):
         event_id = "completed-event-001"
@@ -252,6 +250,29 @@ class TestIdempotency(unittest.TestCase):
             EventStatus.COMPLETED,
         )
 
+    def test_owner_cannot_complete_at_exact_lease_expiry(self):
+        event_id = "exact-expiry-completion-001"
+
+        owner_token = self.store.claim_event_with_lease(
+            event_id,
+            lease_seconds=10,
+            now=100,
+        )
+
+        self.assertIsNotNone(owner_token)
+
+        with self.assertRaises(PermissionError):
+            self.store.complete_event_owned(
+                event_id,
+                owner_token,
+                now=110,
+            )
+
+        self.assertEqual(
+            self.store.get_status(event_id),
+            EventStatus.IN_PROGRESS,
+        )
+
     def test_expired_owner_cannot_fail_event(self):
         event_id = "expired-owner-001"
 
@@ -295,7 +316,7 @@ class TestIdempotency(unittest.TestCase):
         self.assertIsNotNone(new_token)
         self.assertNotEqual(old_token, new_token)
 
-        # Worker A attempts to fail the event with its stale token.
+        # Worker A must not modify the event using its stale token.
         with self.assertRaises(PermissionError):
             self.store.fail_event_owned(
                 event_id,
@@ -348,16 +369,16 @@ class TestIdempotency(unittest.TestCase):
     # --------------------------------------------------
 
     def test_unknown_event_cannot_be_failed_by_owner(self):
+        event_id = "unknown-event-001"
+
         with self.assertRaises(PermissionError):
             self.store.fail_event_owned(
-                "unknown-event-001",
+                event_id,
                 "unknown-token",
                 now=100,
             )
 
-        self.assertIsNone(
-            self.store.get_status("unknown-event-001")
-        )
+        self.assertIsNone(self.store.get_status(event_id))
 
     def test_invalid_owner_token_cannot_fail_event(self):
         event_id = "invalid-owner-001"
@@ -441,7 +462,7 @@ class TestIdempotency(unittest.TestCase):
         )
 
     # --------------------------------------------------
-    # CONCURRENT LEASE RECOVERY TEST
+    # CONCURRENT LEASE RECOVERY TESTS
     # --------------------------------------------------
 
     def test_concurrent_stale_recovery_only_one_owner(self):
@@ -468,12 +489,12 @@ class TestIdempotency(unittest.TestCase):
             )
 
         successful_tokens = [
-            token for token in results if token is not None
+            token for token in results
+            if token is not None
         ]
 
         self.assertEqual(len(successful_tokens), 1)
         self.assertEqual(len(results), 10)
-
         self.assertNotEqual(successful_tokens[0], old_token)
 
 
