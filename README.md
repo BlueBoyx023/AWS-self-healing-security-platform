@@ -1,98 +1,204 @@
+
 # AWS Self-Healing Security Platform
 
-**Automated Cloud Security Detection, Remediation & Verification**
+**Event-Driven Cloud Security Detection, Automated Remediation & Verification**
 
-AWS Config • EventBridge • Lambda • IAM • S3 • CloudWatch • Python
+[![Python](https://img.shields.io/badge/Python-3.14-blue)](https://www.python.org/)
+[![Testing](https://img.shields.io/badge/Tests-91%20Passed-success)](screenshots/README.md)
+[![Status](https://img.shields.io/badge/Status-Under%20Development-orange)](#project-status)
+[![AWS](https://img.shields.io/badge/Cloud-AWS-orange)](https://aws.amazon.com/)
 
 ---
 
-## Overview
+## 1. Project Overview
 
-The AWS Self-Healing Security Platform is an event-driven cloud security automation project designed to detect AWS security misconfigurations, evaluate remediation policies, execute approved corrective actions, and verify the resulting security posture.
+The AWS Self-Healing Security Platform is an event-driven cloud security automation project designed to detect security misconfigurations, evaluate remediation policies, execute authorized corrective actions, and verify the resulting security posture.
 
-The goal is to reduce manual security intervention while maintaining control, accountability, and auditability.
+The platform aims to reduce manual security intervention through controlled, policy-driven remediation while maintaining accountability, auditability, and operational safety.
 
-## Objectives
+The initial implementation focuses on securing Amazon S3 buckets against unintended public access.
+
+**Development approach:** Local-first implementation using Python, automated tests, and mocked AWS interactions before live AWS integration.
+
+## 2. Project Objectives
 
 - Detect AWS security misconfigurations.
-- Automate approved remediation workflows.
-- Enforce least-privilege IAM permissions.
-- Maintain security audit records.
+- Validate incoming security events.
+- Enforce resource-specific remediation policies.
+- Prevent unauthorized remediation.
+- Execute approved security remediation.
+- Prevent harmful duplicate event processing.
 - Verify remediation outcomes.
-- Require human approval for high-impact actions.
+- Maintain structured audit records.
+- Monitor security operations through metrics.
+- Support controlled recovery from processing failures.
 
-## Architecture
+## 3. System Architecture
 
-**Initial workflow:**
+### Target AWS Architecture
 
-1. AWS Config evaluates resource compliance.
-2. Amazon EventBridge routes relevant security events.
-3. AWS Lambda evaluates the finding and remediation policy.
-4. Approved remediation actions are executed.
-5. The platform verifies the resulting resource configuration.
-6. CloudWatch and Amazon S3 retain operational and audit evidence.
+AWS Config → Amazon EventBridge → AWS Lambda → Policy Evaluation → S3 Remediation → Verification → Audit & Monitoring
 
-*Architecture diagram: To be added.*
+### Core Components
 
-## Technology Stack
+| Component | Responsibility |
+|---|---|
+| AWS Config | Security compliance detection |
+| Amazon EventBridge | Security event routing |
+| AWS Lambda | Event processing and orchestration |
+| AWS IAM | Access control and permissions |
+| Amazon S3 | Resource remediation and audit evidence storage |
+| Amazon CloudWatch | Monitoring, logs and metrics |
+| Python | Security automation and remediation logic |
+| Terraform | Infrastructure as Code |
+
+*The above describes the intended AWS deployment architecture. Live AWS integration and deployment are separate milestones.*
+
+## 4. Implemented Components
+
+The following components have been implemented and developed with local automated testing:
+
+| Component | Implementation |
+|---|---|
+| Event Validator | Validates incoming AWS Config events |
+| Policy Engine | Enforces resource allowlists and remediation authorization |
+| S3 Remediation Engine | Executes controlled S3 remediation logic |
+| Verification Engine | Checks remediation outcomes |
+| Centralized Orchestrator | Coordinates the remediation workflow |
+| Idempotency Manager | Prevents duplicate event processing |
+| Lease-Based Processing | Manages event ownership and stale-event recovery |
+| Audit Logger | Generates structured audit records |
+| Metrics Module | Records security operation metrics |
+| Error Handler | Centralizes workflow error handling |
+
+## 5. Security Controls
+
+- Fail-closed remediation authorization.
+- Explicit resource allowlisting.
+- Event source and event-type validation.
+- Required-field validation.
+- Event identifier validation.
+- Rejection of malformed event identifiers.
+- Duplicate event protection.
+- Lease-based event ownership.
+- Dry-run execution enabled by default.
+- Post-remediation verification.
+- Structured audit logging.
+- Centralized error handling.
+
+## 6. Testing & Validation
+
+The platform uses Python unit tests and mocked AWS responses during local development.
+
+### Latest Verified Test Results
+
+| Metric | Result |
+|---|---:|
+| Tests passed | 91 |
+| Subtests passed | 9 |
+| Test failures | 0 |
+| Test framework | pytest |
+| Execution environment | Local Python virtual environment |
+
+### Test Execution Evidence
+
+![Local Test Results](screenshots/test-results-91-passed.png)
+
+See the [Screenshots & Evidence](screenshots/README.md) directory for additional implementation and testing evidence.
+
+**Testing qualification:** These results demonstrate local automated testing. They do not establish live AWS deployment or successful execution against real AWS resources.
+
+## 7. Technology Stack
 
 | Technology | Purpose |
 |---|---|
-| AWS Config | Configuration compliance detection |
-| Amazon EventBridge | Event routing and automation |
-| AWS Lambda | Remediation engine |
-| AWS IAM | Access control and least privilege |
-| Amazon S3 | Audit evidence storage |
-| Amazon CloudWatch | Logging and monitoring |
-| Python | Automation logic |
+| Python | Security automation |
+| pytest | Automated testing |
+| AWS Config | Configuration compliance |
+| Amazon EventBridge | Event-driven architecture |
+| AWS Lambda | Serverless execution |
+| Amazon S3 | Storage and remediation target |
+| AWS IAM | Identity and access management |
+| Amazon CloudWatch | Monitoring and metrics |
 | Terraform | Infrastructure as Code |
+| Git & GitHub | Version control and project documentation |
 
-## Initial Security Use Case
+## 8. Development Roadmap
 
-**Unintended public access to an S3 bucket**
-
-The initial MVP will detect an S3 bucket with an insecure public-access configuration and execute an approved remediation workflow.
-
-## Security Principles
-
-- Least privilege
-- Defense in depth
-- Idempotent automation
-- Controlled remediation
-- Human approval for high-impact actions
-- Auditability
-- Post-remediation verification
-
-## Development Roadmap
-
-- [ ] Repository and architecture setup
-- [ ] AWS Config compliance detection
-- [ ] EventBridge integration
-- [ ] Python Lambda remediation engine
-- [ ] Remediation verification
-- [ ] Audit logging and monitoring
+- [x] Core repository and project structure
+- [x] Event validation
+- [x] Remediation policy engine
+- [x] S3 remediation logic
+- [x] Verification engine
+- [x] Centralized orchestration
+- [x] Structured audit logging
+- [x] Security metrics integration
+- [x] Centralized error handling
+- [x] Idempotency management
+- [x] Lease-based event processing
+- [x] Local automated test coverage
+- [ ] Additional adversarial security testing
+- [ ] Enhanced resource identifier validation
+- [ ] Security documentation and threat model validation
+- [ ] AWS infrastructure implementation
+- [ ] Isolated AWS integration testing
 - [ ] Terraform deployment
-- [ ] Positive, negative, and failure-path testing
-- [ ] Technical documentation
+- [ ] End-to-end AWS remediation testing
 
-## Project Status
+## 9. Project Safety & Deployment
 
-**Status:** Under development — initial MVP.
+The current development environment prioritizes local testing and mocked AWS interactions.
 
-## Cost & Safety
+Before live deployment:
 
-This project is designed for controlled AWS lab usage.
-
-- Use isolated test resources.
+- Use isolated AWS test resources.
+- Apply least-privilege IAM permissions.
+- Review all remediation permissions.
+- Keep production resources outside the remediation allowlist.
 - Review AWS costs before deployment.
-- Apply least-privilege permissions.
-- Never commit AWS credentials or secrets.
-- Document cleanup procedures.
+- Verify remediation behavior before enabling automated actions.
+- Never commit AWS credentials, access keys, or secrets.
+- Document resource cleanup procedures.
 
-## Disclaimer
+Live AWS remediation is not claimed by the current local test results.
 
-Educational security engineering project. Only deploy and test in AWS accounts and environments you own or are explicitly authorized to assess.
+## 10. Repository Structure
+
+```text
+AWS-self-healing-security-platform/
+│
+├── architecture/
+├── docs/
+├── lambda/
+│   └── remediation_engine/
+│       ├── audit_logger.py
+│       ├── error_handler.py
+│       ├── event_validator.py
+│       ├── idempotency.py
+│       ├── metrics.py
+│       ├── orchestrator.py
+│       ├── policy_engine.py
+│       ├── remediation_engine.py
+│       └── verification_engine.py
+│
+├── policies/
+├── screenshots/
+├── terraform/
+├── tests/
+│
+├── PROJECT_STATUS.md
+├── README.md
+└── LICENSE
+```
+
+## 11. Disclaimer
+
+This is an educational cloud security engineering project.
+
+All testing and deployment must be performed in AWS accounts and environments owned by the developer or explicitly authorized for assessment.
 
 ---
 
 **Author:** BlueBoyx023
+
+**Project Focus:** AWS Security Engineering | Cloud Security Automation | Security Remediation | Autonomous Cloud Defense
