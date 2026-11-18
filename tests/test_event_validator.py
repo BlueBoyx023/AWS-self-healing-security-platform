@@ -92,6 +92,41 @@ class TestEventValidator(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_event(event)
 
+    def test_none_event_id(self):
+        event = create_valid_event()
+        event["id"] = None
+
+        with self.assertRaises(ValueError):
+            validate_event(event)
+
+    def test_integer_event_id(self):
+        event = create_valid_event()
+        event["id"] = 12345
+
+        with self.assertRaises(ValueError):
+            validate_event(event)
+
+    def test_list_event_id(self):
+        event = create_valid_event()
+        event["id"] = []
+
+        with self.assertRaises(ValueError):
+            validate_event(event)
+
+    def test_dictionary_event_id(self):
+        event = create_valid_event()
+        event["id"] = {}
+
+        with self.assertRaises(ValueError):
+            validate_event(event)
+
+    def test_boolean_event_id(self):
+        event = create_valid_event()
+        event["id"] = True
+
+        with self.assertRaises(ValueError):
+            validate_event(event)
+
 
 if __name__ == "__main__":
     unittest.main()
