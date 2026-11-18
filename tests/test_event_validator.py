@@ -69,6 +69,29 @@ class TestEventValidator(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_event(event)
 
+    # Event ID validation tests
+
+    def test_missing_event_id(self):
+        event = create_valid_event()
+        del event["id"]
+
+        with self.assertRaises(ValueError):
+            validate_event(event)
+
+    def test_empty_event_id(self):
+        event = create_valid_event()
+        event["id"] = ""
+
+        with self.assertRaises(ValueError):
+            validate_event(event)
+
+    def test_whitespace_event_id(self):
+        event = create_valid_event()
+        event["id"] = "   "
+
+        with self.assertRaises(ValueError):
+            validate_event(event)
+
 
 if __name__ == "__main__":
     unittest.main()
