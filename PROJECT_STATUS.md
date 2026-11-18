@@ -1,22 +1,24 @@
 
-# AWS Self-Healing Security Platform â€” Project Status
+# AWS Self-Healing Security Platform - Project Status
 
-**Status date:** 17 November 2026
+**Status date:** 18 November 2026
 **Repository:** https://github.com/BlueBoyx023/AWS-self-healing-security-platform
 **Branch:** `main`
-**Project focus:** AWS cloud security engineering, automated remediation, and autonomous cloud defense.
+**Project focus:** AWS Security Engineering, Automated Remediation and Autonomous Cloud Defense
 
-> This checkpoint records confirmed implementation, testing, and Git progress. It does not claim that every component is deployed in a live AWS environment.
+---
 
 ## 1. Project Objective
 
-Build an AWS security platform that receives and validates security events, evaluates remediation decisions, executes controlled remediation, verifies outcomes, and maintains operational evidence.
+Build an event-driven AWS security platform that receives and validates security events, evaluates remediation policies, executes authorized corrective actions, verifies remediation outcomes, and maintains operational evidence.
 
-The project remains focused on **cloud security engineering and autonomous defense**. It is not being developed as a GRC platform.
+The project prioritizes controlled remediation, least-privilege access, idempotent processing, auditability, and safe failure handling.
+
+The initial security use case focuses on unintended public access to an isolated Amazon S3 bucket.
 
 ## 2. Implemented Components
 
-The following components have been reported as implemented:
+The following components have been implemented in the local development environment:
 
 - Event validation
 - Remediation policy engine
@@ -24,189 +26,146 @@ The following components have been reported as implemented:
 - Verification engine
 - Centralized orchestrator
 - Structured audit logger
-- CloudWatch metrics
-- Centralized error handling
+- Security metrics module
+- Centralized error handler
 - Idempotency management
-- Lease-based orchestration and stale-event recovery
+- Lease-based event processing
+- Stale-event recovery
 
-**Deployment qualification:** Implementation and local test coverage do not establish live AWS deployment. Describe AWS remediation or CloudWatch behavior as live only when supported by actual AWS execution evidence.
+## 3. Implemented Security Controls
 
-## 3. Latest Verified Test Checkpoint
+- Trusted event-source validation
+- Event-type validation
+- Required-field validation
+- AWS region presence validation
+- Resource-type validation
+- Event identifier validation
+- Rejection of missing event identifiers
+- Rejection of empty and whitespace-only event identifiers
+- Rejection of non-string event identifiers
+- Explicit resource allowlisting
+- Fail-closed remediation authorization
+- Duplicate event protection
+- Lease-based processing ownership
+- Dry-run execution
+- Post-remediation verification
+- Structured audit logging
+- Centralized error handling
 
-**Date:** 17 November 2026
+Additional adversarial testing and resource validation remain ongoing.
 
-### Full test suite
+## 4. Latest Verified Test Checkpoint
 
-- **83 tests passed**
-- **9 subtests passed**
-- **0 failures shown**
-- Reported runtime: approximately 1.13 seconds
+**Test framework:** pytest
+**Environment:** Local Python virtual environment
+**Execution mode:** Local testing with mocked AWS interactions
 
-The result was captured in the user's terminal after updating `tests/test_idempotency.py`.
+| Metric | Result |
+|---|---:|
+| Tests passed | 91 |
+| Subtests passed | 9 |
+| Test failures | 0 |
 
-### Idempotency and lease-boundary coverage
+Latest recorded command:
 
-The test suite includes coverage for:
-
-- First-event acceptance
-- Duplicate-event rejection
-- Completed-event handling
-- Retry behavior
-- Concurrent claims
-- Unclaimed-event transition protection
-- Active and expired leases
-- Stale-owner rejection after recovery
-- Invalid owner tokens
-- Invalid state transitions
-- Concurrent stale-lease recovery
-- Rejection of completion at the exact lease-expiration boundary
-
-**New boundary test:**
-
-`test_owner_cannot_complete_at_exact_lease_expiry`
-
-This test verifies that an owner cannot complete an event when:
-
-`now == lease_expires_at`
-
-The expected behavior is `PermissionError`, with the event remaining in `IN_PROGRESS`.
-
-### Test evidence qualification
-
-The results represent local automated test execution. They do not establish successful execution against live AWS resources.
-
-## 4. Idempotency and Lease Ownership Notes
-
-The idempotency implementation uses ownership-aware operations and lease-based event recovery.
-
-Important ownership checks include:
-
-1. The event record exists.
-2. The event is in `IN_PROGRESS` state.
-3. The supplied owner token matches the current owner.
-4. A lease expiration exists.
-5. The current time is strictly earlier than the lease expiration for owner operations.
-
-An operation at or after lease expiry is rejected.
-
-Invalid or expired ownership raises:
-
-```python
-PermissionError("Invalid or expired event ownership.")
+```powershell
+python -m pytest -q
 ```
 
-`recover_stale_event()` permits recovery at the lease-expiration boundary and assigns a new owner token.
+Latest recorded result:
 
-The test suite verifies that a stale owner cannot complete or fail an event after ownership recovery and that concurrent recovery results in only one successful new owner.
+```text
+91 passed, 9 subtests passed
+```
 
-## 5. Current Development Position
+**Evidence:** `screenshots/test-results-91-passed.png`
 
-### Completed milestone â€” 17 November 2026
+These results demonstrate local automated testing. They do not establish successful execution against live AWS resources.
 
-- Updated `tests/test_idempotency.py`.
-- Added exact-expiry completion boundary coverage.
-- Ran the full test suite successfully: 83 passed, 9 subtests passed.
-- Checked Git diff formatting.
-- Committed the changes.
-- Pushed the commit to GitHub.
-- Verified that the local branch and remote branch are synchronized.
-- Verified a clean working tree.
+## 5. Recent Development History
 
-### Next engineering milestone
+| Commit | Development change |
+|---|---|
+| `3a69560` | Validate event IDs before processing |
+| `9cdc4c4` | Cover non-string event identifiers |
+| `f1763bb` | Add reference multi-account architecture |
+| `d035eab` | Finalize project README and architecture references |
 
-**Broader orchestration reliability and security-invariant testing.**
+These are selected development milestones, not the complete Git history.
 
-Planned tasks:
+## 6. Repository Documentation
 
-1. Review existing orchestration tests and identify uncovered failure paths.
-2. Test failure injection during event processing.
-3. Examine concurrent processing and state-transition integrity.
-4. Review retry behavior and recovery after interrupted execution.
-5. Review authorization boundaries and remediation policy enforcement.
-6. Evaluate the limitations of in-memory idempotency state for distributed execution.
-7. Document the distinction between local simulation and AWS-backed execution.
+| File | Purpose |
+|---|---|
+| `README.md` | Project overview, architecture, testing and roadmap |
+| `PROJECT_STATUS.md` | Current project status |
+| `architecture/architecture.md` | Current, target and reference architectures |
+| `docs/security-design.md` | Security controls and design decisions |
+| `docs/threat-model.md` | Threat scenarios and mitigations |
+| `docs/RESUME_CHECKPOINT.md` | Development handover checkpoint |
+| `policies/README.md` | Remediation policy documentation |
+| `tests/test_plan.md` | Testing strategy and coverage |
+| `screenshots/README.md` | Evidence documentation |
 
-Inspect the current source and tests before making implementation changes. Avoid duplicating existing coverage.
+## 7. Development Environment
 
-## 6. GitHub Evidence and Documentation
+- Windows
+- Visual Studio Code
+- Python virtual environment
+- pytest
+- Git and GitHub
+- Mocked AWS interactions for local development
 
-The project should maintain genuine, reproducible technical evidence.
+## 8. Deployment Status
 
-Planned evidence includes:
+| Component | Status |
+|---|---|
+| Local Python implementation | Implemented |
+| Local automated testing | Implemented |
+| AWS Config live integration | Pending |
+| EventBridge live integration | Pending |
+| Lambda deployment | Pending |
+| Live AWS remediation | Not yet established |
+| Terraform deployment | Pending |
+| End-to-end AWS integration testing | Pending |
 
-1. Idempotency test results
-2. Concurrent event-processing tests
-3. Lease expiration and recovery tests
-4. Stale-owner rejection
-5. Remediation policy evaluation
-6. Actual S3 remediation and post-remediation verification
-7. Structured audit logs
-8. CloudWatch metrics, if captured from an actual AWS deployment
-9. Full test-suite results
+No live AWS deployment or production remediation is claimed by this checkpoint.
 
-Clearly distinguish simulated/unit-test evidence from live AWS execution. Do not use illustrative images as proof of platform behavior.
+## 9. Remaining Engineering Priorities
 
-The `screenshots/` directory already exists. Populate it with genuine evidence progressively.
-
-A reviewer also suggested considering detection of overprivileged users as a potential cloud-security detection capability. This remains a possible enhancement, not a completed feature.
-
-## 7. Git Status
-
-**Latest verified commit:**
-
-- Commit: `a0f2077`
-- Message: `test: strengthen idempotency lease boundary coverage`
-- Branch: `main`
-- Remote: `origin/main`
-- Push: Successful
-- Working tree: Clean
-- Local branch: Up to date with `origin/main`
-
-The commit contains changes to:
-
-`tests/test_idempotency.py`
-
-The change summary reported 60 insertions and 39 deletions.
-
-Repository status was verified after the push on 17 November 2026.
-
-## 8. Next Work Session
-
-1. Inspect the current orchestration implementation and tests.
-2. Identify existing coverage before adding new tests.
-3. Review orchestration failure and recovery paths.
-4. Add targeted reliability tests only where coverage is missing.
-5. Run focused tests after changes.
-6. Run the complete test suite.
-7. Capture genuine test evidence.
-8. Update this checkpoint with verified results and Git status.
-
-## 9. Working Rules
-
-- Understand existing code and project flow before editing.
-- Do not accept AI-generated code without understanding its purpose and behavior.
-- Preserve existing tests when adding coverage.
-- Run focused tests and the full suite after meaningful changes.
-- Use Windows PowerShell and VS Code instructions where appropriate.
-- Verify Git status and commit history before claiming changes were pushed.
-- Keep evidence reproducible and distinguish local tests from live AWS behavior.
-- Record implementation decisions, limitations, test results, and next steps.
-
-## 10. Daily Work Allocation
-
-Planned schedule: **10 focused hours per day, 7 days per week (70 hours per week).**
-
-| Workstream | Daily allocation |
-|---|---:|
-| Main project development | 3 hours |
-| AWS and Cloud Security learning | 2 hours |
-| Secondary project development | 1.5 hours |
-| Research and experimentation | 1.5 hours |
-| Testing and documentation | 2 hours |
-| **Total** | **10 hours** |
-
-Protect sleep, breaks, and recovery. This allocation describes focused work time.
+1. Expand adversarial event validation.
+2. Strengthen S3 resource identifier validation.
+3. Validate AWS region identifiers.
+4. Expand orchestrator security tests.
+5. Review idempotency and lease-recovery edge cases.
+6. Validate audit logging and failure handling.
+7. Complete security design and threat-model documentation.
+8. Implement isolated AWS infrastructure.
+9. Perform AWS integration testing.
+10. Develop controlled end-to-end remediation testing.
 
 ---
 
-**Checkpoint rule:** At the end of each work session, update this file with what was actually completed, exact test results, Git commit/push status, unresolved issues, and the next concrete task.
+## 10. Development Safety Requirements
+
+- Continue local testing before live AWS integration.
+- Use isolated AWS test resources.
+- Enforce least-privilege IAM permissions.
+- Maintain explicit remediation allowlists.
+- Keep production resources outside the test allowlist.
+- Never commit credentials or secrets.
+- Review AWS costs before deployment.
+- Require appropriate approval for high-impact remediation.
+- Preserve audit evidence and verification results.
+
+---
+
+## Current Project Status
+
+**Development stage:** Local implementation and automated testing.
+
+**Latest recorded test checkpoint:** 91 tests passed and 9 subtests passed.
+
+**AWS deployment:** Pending isolated AWS integration and deployment testing.
+
+**Next development milestone:** Additional security validation and adversarial testing.
