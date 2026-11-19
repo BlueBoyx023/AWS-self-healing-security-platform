@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "started_at_utc": "2026-11-19T09:27:40.506395+00:00",
+  "completed_at_utc": "2026-11-19T09:27:42.047952+00:00",
+  "python_version": "3.14.7",
+  "pytest_version": "9.2.0",
+  "command": "python -m pytest -q",
+  "exit_code": 0,
+  "test_counts": {
+    "passed": 91,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "xpassed": 0,
+    "summary": "91 passed, 9 subtests passed in 0.70s"
+  },
+  "subtest_counts": {
+    "passed": 9,
+    "failed": 0
+  },
+  "junit_counts": {
+    "total": 100,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "duration_seconds": 0.285
+  }
+}
