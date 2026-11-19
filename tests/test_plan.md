@@ -1,5 +1,4 @@
-
-# Test Plan — AWS Self-Healing Security Platform
+﻿# Test Plan — AWS Self-Healing Security Platform
 
 ## 1. Testing Objective
 
@@ -7,24 +6,26 @@ Validate that the platform detects security events, rejects unauthorized request
 
 ## 2. Functional Tests
 
-| Test ID | Scenario | Expected Result |
-|---|---|---|
-| T01 | Valid S3 security event | Event accepted |
-| T02 | Invalid event source | Event rejected |
-| T03 | Missing bucket identifier | Event rejected |
-| T04 | Bucket not in allowlist | Remediation denied |
-| T05 | Approved remediation | Action executed |
-| T06 | Duplicate event | No harmful repeated action |
-| T07 | AWS API failure | Error recorded |
-| T08 | Verification failure | Finding remains unresolved |
+| Test ID | Scenario | Expected Result | Coverage |
+|---|---|---|---|
+| T01 | Valid S3 security event | Event accepted | Implemented and tested |
+| T02 | Invalid event source | Event rejected | Implemented and tested |
+| T03 | Missing bucket identifier | Event rejected | Implemented and tested |
+| T04 | Bucket not in allowlist | Remediation denied | Implemented and tested |
+| T05 | Approved remediation | Action executed | Implemented and tested with mocked AWS client |
+| T06 | Duplicate event | No harmful repeated action | Implemented and tested |
+| T07 | AWS API failure | Error recorded | Implemented and tested with mocked AWS client |
+| T08 | Verification failure | Finding remains unresolved | Implemented and tested with mocked AWS client |
 
 ## 3. Security Tests
 
 - Attempt unauthorized remediation.
 - Submit malformed event payloads.
 - Test unexpected resource identifiers.
-- Test duplicate event delivery.
-- Verify least-privilege access.
+- Test duplicate event delivery and concurrent claims.
+- Test lease expiration and stale-event recovery.
+- Verify remediation authorization through the application-level allowlist.
+- Least-privilege AWS IAM validation remains pending.
 
 ## 4. Evidence Collection
 
@@ -39,10 +40,20 @@ For each test, record:
 
 ## 5. Testing Environment
 
-Initial tests will use Python unit tests and mocked AWS responses.
+Unit tests use Python pytest and mocked AWS client responses.
 
 Live AWS integration tests will be performed later in an isolated test environment.
 
 ## 6. Current Status
 
-Test cases designed — execution pending.
+Unit test execution verified on 19 November 2026.
+
+- 91 tests passed.
+- 9 subtests passed.
+- No test failures reported.
+- All eight documented functional scenarios have matching test coverage.
+- AWS interactions are validated using mocked clients.
+- Live AWS integration testing remains pending.
+- AWS IAM least-privilege policy implementation and validation remain pending.
+
+Test evidence: Local pytest execution.
