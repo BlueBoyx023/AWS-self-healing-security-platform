@@ -5,6 +5,12 @@
 import argparse
 import sys
 
+from scripts.devdoc.openai_provider import (
+    DEFAULT_MAX_CONTEXT_BYTES,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_TIMEOUT_SECONDS,
+    OpenAIProvider,
+)
 from scripts.devdoc.orchestrator import DevDocOrchestrator
 
 
@@ -48,6 +54,33 @@ def create_parser():
         help="Maximum total context size.",
     )
 
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="OpenAI model; defaults to DEVDOC_OPENAI_MODEL or the adapter default.",
+    )
+
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_TIMEOUT_SECONDS,
+        help="OpenAI request timeout in seconds.",
+    )
+
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=DEFAULT_MAX_RETRIES,
+        help="Maximum SDK retries (0 to 5).",
+    )
+
+    parser.add_argument(
+        "--max-context-bytes",
+        type=int,
+        default=DEFAULT_MAX_CONTEXT_BYTES,
+        help="Maximum serialized context size sent to OpenAI.",
+    )
+
     return parser
 
 
@@ -61,13 +94,15 @@ def main(argv=None, provider=None):
     parser = create_parser()
     args = parser.parse_args(argv)
 
-    if provider is None:
-        parser.error(
-            "No AI provider configured. "
-            "A provider must be supplied before generation can run."
-        )
-
     try:
+        if provider is None:
+            provider = OpenAIProvider(
+                model=args.model,
+                timeout=args.timeout,
+                max_retries=args.max_retries,
+                max_context_bytes=args.max_context_bytes,
+            )
+
         orchestrator = DevDocOrchestrator(
             repo_path=args.repo,
             ai_provider=provider,

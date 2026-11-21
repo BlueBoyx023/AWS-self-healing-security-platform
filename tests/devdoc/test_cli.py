@@ -21,6 +21,10 @@ def test_parser_default_arguments():
     assert args.document_type == "technical documentation"
     assert args.max_file_bytes == 100_000
     assert args.max_total_bytes == 1_000_000
+    assert args.model is None
+    assert args.timeout == 60.0
+    assert args.max_retries == 2
+    assert args.max_context_bytes == 1_000_000
 
 
 def test_parser_accepts_custom_arguments():
@@ -48,9 +52,44 @@ def test_parser_rejects_invalid_size_argument():
         parser.parse_args(["--max-file-bytes", "invalid"])
 
 
-def test_main_requires_provider():
-    with pytest.raises(SystemExit):
-        main([])
+def test_main_creates_default_openai_provider(monkeypatch, capsys):
+    captured = {}
+    provider = MockProvider()
+
+    def create_provider(**kwargs):
+        captured["provider_options"] = kwargs
+        return provider
+
+    class FakeOrchestrator:
+        def __init__(self, **kwargs):
+            captured["orchestrator_provider"] = kwargs["ai_provider"]
+
+        def run(self, document_type):
+            return {
+                "context_summary": {},
+                "draft": SimpleNamespace(content="# Overview\nDraft."),
+                "review": SimpleNamespace(approved=True, issues=[], warnings=[]),
+            }
+
+    monkeypatch.setattr(cli_module, "OpenAIProvider", create_provider)
+    monkeypatch.setattr(cli_module, "DevDocOrchestrator", FakeOrchestrator)
+
+    result = main([
+        "--model", "configured-model",
+        "--timeout", "20",
+        "--max-retries", "1",
+        "--max-context-bytes", "2000",
+    ])
+
+    assert result == 0
+    assert captured["provider_options"] == {
+        "model": "configured-model",
+        "timeout": 20.0,
+        "max_retries": 1,
+        "max_context_bytes": 2000,
+    }
+    assert captured["orchestrator_provider"] is provider
+    assert "Written to disk: No" in capsys.readouterr().out
 
 
 def test_main_runs_successfully(monkeypatch, capsys):

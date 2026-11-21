@@ -117,36 +117,32 @@ class GitChangeAnalyzer:
 
         return False
 
-    def _validate_reference(self, reference: str) -> None:
+    def _validate_reference(self, reference: str) -> str:
         """Ensure the supplied Git reference resolves to a commit."""
 
         if not isinstance(reference, str) or not reference.strip():
             raise ValueError("Git reference must be a non-empty string.")
 
-        self._run_git([
+        return self._run_git([
             "rev-parse",
             "--verify",
             "--quiet",
             "--end-of-options",
             f"{reference}^{{commit}}",
-        ])
+        ]).strip()
 
-    def _parse_git_status(self) -> list[dict]:
-        """Parse Git porcelain status output."""
+    def _parse_diff(self, baseline: str) -> list[dict]:
+        """Parse tracked changes from a baseline tree to the worktree."""
 
-        output = self._run_git([
-            "status",
-            "--porcelain=v1",
-            "-z",
-            "--untracked-files=all",
-        ])
-
-        # Re-run in binary mode to preserve Git's NUL-delimited paths.
         raw_output = self._run_git_bytes([
-            "status",
-            "--porcelain=v1",
+            "diff",
+            "--name-status",
             "-z",
-            "--untracked-files=all",
+            "--find-renames",
+            "--find-copies",
+            "--no-ext-diff",
+            baseline,
+            "--",
         ])
 
         entries = raw_output.split(b"\0")
@@ -154,45 +150,47 @@ class GitChangeAnalyzer:
         index = 0
 
         while index < len(entries):
-            entry = entries[index]
+            status_entry = entries[index]
             index += 1
 
-            if not entry:
+            if not status_entry:
                 continue
 
-            if len(entry) < 4:
+            status_code = status_entry.decode("ascii", errors="replace")
+            if not status_code:
                 continue
 
-            status_code = entry[:2].decode("ascii", errors="replace")
-            file_path = entry[3:].decode("utf-8", errors="replace")
+            if index >= len(entries):
+                break
 
+            first_path = entries[index].decode("utf-8", errors="replace")
+            index += 1
             old_path = None
 
-            if "R" in status_code or "C" in status_code:
-                if index < len(entries):
-                    old_path = entries[index].decode(
-                        "utf-8",
-                        errors="replace",
-                    )
-                    index += 1
-
-            if status_code == "??":
-                status = "added"
-            elif "R" in status_code:
-                status = "renamed"
-            elif "C" in status_code:
-                status = "copied"
-            elif "D" in status_code:
-                status = "deleted"
-            elif "A" in status_code:
-                status = "added"
+            if status_code.startswith(("R", "C")):
+                if index >= len(entries):
+                    break
+                file_path = entries[index].decode("utf-8", errors="replace")
+                index += 1
+                old_path = first_path
+                status = "renamed" if status_code.startswith("R") else "copied"
             else:
-                status = "modified"
+                file_path = first_path
+                code = status_code[0]
+                if code == "A":
+                    status = "added"
+                elif code == "D":
+                    status = "deleted"
+                else:
+                    status = "modified"
 
-            if self._is_excluded(file_path):
+            if not self._is_valid_repo_path(file_path) or self._is_excluded(file_path):
                 continue
 
-            if old_path and self._is_excluded(old_path):
+            if old_path and (
+                not self._is_valid_repo_path(old_path)
+                or self._is_excluded(old_path)
+            ):
                 continue
 
             change = {
@@ -206,6 +204,39 @@ class GitChangeAnalyzer:
             changes.append(change)
 
         return changes
+
+    def _parse_untracked_files(self) -> list[dict]:
+        """Return safe, non-ignored untracked files without duplicate paths."""
+
+        raw_output = self._run_git_bytes([
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ])
+
+        changes = []
+        for raw_path in raw_output.split(b"\0"):
+            if not raw_path:
+                continue
+            file_path = raw_path.decode("utf-8", errors="replace")
+            if (
+                self._is_valid_repo_path(file_path)
+                and not self._is_excluded(file_path)
+            ):
+                changes.append({"path": file_path, "status": "added"})
+        return changes
+
+    @staticmethod
+    def _is_valid_repo_path(file_path: str) -> bool:
+        """Reject paths that are absolute or lexically escape the repository."""
+
+        if not isinstance(file_path, str) or not file_path or "\0" in file_path:
+            return False
+
+        normalized = file_path.replace("\\", "/")
+        path = Path(normalized)
+        return not path.is_absolute() and ".." not in path.parts
 
     def _detect_unstaged_renames(
         self,
@@ -250,10 +281,13 @@ class GitChangeAnalyzer:
                 new_path = new_change["path"]
 
                 try:
-                    new_content = (
-                        self.repository / new_path
-                    ).read_bytes()
-                except OSError:
+                    candidate = self.repository / new_path
+                    resolved = candidate.resolve(strict=True)
+                    resolved.relative_to(self.repository)
+                    if not resolved.is_file() or candidate.is_symlink():
+                        continue
+                    new_content = resolved.read_bytes()
+                except (OSError, ValueError):
                     continue
 
                 new_hash = hashlib.sha256(
@@ -308,15 +342,31 @@ class GitChangeAnalyzer:
         return summary
 
     def analyze(self, baseline: str = "HEAD") -> dict:
-        """Analyze working-tree changes against a valid Git baseline."""
+        """Analyze worktree changes since the baseline's merge base with HEAD.
 
-        self._validate_reference(baseline)
+        Tracked changes include commits on the current branch and staged or
+        unstaged edits. Eligible untracked files are added separately.
+        """
 
-        changes = self._parse_git_status()
+        baseline_commit = self._validate_reference(baseline)
+        head_commit = self._validate_reference("HEAD")
+        merge_base = self._run_git([
+            "merge-base",
+            baseline_commit,
+            head_commit,
+        ]).strip()
+
+        changes = self._parse_diff(merge_base)
+        tracked_paths = {change["path"] for change in changes}
+        changes.extend(
+            change
+            for change in self._parse_untracked_files()
+            if change["path"] not in tracked_paths
+        )
 
         changes = self._detect_unstaged_renames(
             changes,
-            baseline,
+            merge_base,
         )
 
         changes.sort(

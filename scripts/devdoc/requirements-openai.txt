@@ -1,0 +1,2 @@
+# Optional dependency for the OpenAI-backed DevDoc CLI provider.
+openai>=1.66.0,<3.0.0
