@@ -15,6 +15,7 @@ DEFAULT_TIMEOUT_SECONDS = 60.0
 DEFAULT_MAX_RETRIES = 2
 MAX_ALLOWED_RETRIES = 5
 DEFAULT_MAX_CONTEXT_BYTES = 1_000_000
+DEFAULT_MAX_RESPONSE_BYTES = 1_000_000
 
 _DRAFT_SCHEMA = {
     "type": "object",
@@ -33,6 +34,7 @@ class OpenAIProvider(AIProvider):
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
         max_context_bytes: int = DEFAULT_MAX_CONTEXT_BYTES,
+        max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
         client: Any = None,
     ):
         super().__init__()
@@ -61,11 +63,18 @@ class OpenAIProvider(AIProvider):
             or max_context_bytes <= 0
         ):
             raise ValueError("Maximum context size must be a positive integer.")
+        if (
+            not isinstance(max_response_bytes, int)
+            or isinstance(max_response_bytes, bool)
+            or max_response_bytes <= 0
+        ):
+            raise ValueError("Maximum response size must be a positive integer.")
 
         self.model = selected_model.strip()
         self.timeout = float(timeout)
         self.max_retries = max_retries
         self.max_context_bytes = max_context_bytes
+        self.max_response_bytes = max_response_bytes
         self.client = self._create_client(client)
 
     def _create_client(self, client: Any) -> Any:
@@ -109,9 +118,10 @@ class OpenAIProvider(AIProvider):
             request.context,
             ensure_ascii=False,
             separators=(",", ":"),
-            default=str,
         )
-        context_size = len(serialized_context.encode("utf-8"))
+        context_size = len(request.instruction.encode("utf-8")) + len(
+            serialized_context.encode("utf-8")
+        )
         if context_size > self.max_context_bytes:
             raise AIProviderError(
                 "Request context exceeds the configured size limit."
@@ -144,16 +154,21 @@ class OpenAIProvider(AIProvider):
         metadata: dict[str, Any] = {}
 
         request_id = getattr(response, "_request_id", None)
-        if isinstance(request_id, str) and request_id:
+        if (
+            isinstance(request_id, str)
+            and 0 < len(request_id) <= 128
+            and all(char.isprintable() for char in request_id)
+            and not self.secret_scanner.scan(request_id).findings
+        ):
             metadata["request_id"] = request_id
 
         usage = getattr(response, "usage", None)
         if usage is not None:
             input_tokens = getattr(usage, "input_tokens", None)
             output_tokens = getattr(usage, "output_tokens", None)
-            if isinstance(input_tokens, int):
+            if isinstance(input_tokens, int) and not isinstance(input_tokens, bool) and input_tokens >= 0:
                 metadata["input_tokens"] = input_tokens
-            if isinstance(output_tokens, int):
+            if isinstance(output_tokens, int) and not isinstance(output_tokens, bool) and output_tokens >= 0:
                 metadata["output_tokens"] = output_tokens
 
         return AIResponse(
@@ -163,8 +178,7 @@ class OpenAIProvider(AIProvider):
             metadata=metadata,
         )
 
-    @staticmethod
-    def _extract_content(response: Any) -> str:
+    def _extract_content(self, response: Any) -> str:
         """Validate completed structured output before exposing draft content."""
 
         if getattr(response, "status", None) != "completed":
@@ -173,6 +187,8 @@ class OpenAIProvider(AIProvider):
         output_text = getattr(response, "output_text", None)
         if not isinstance(output_text, str) or not output_text.strip():
             raise AIProviderError("OpenAI returned an empty response.")
+        if len(output_text.encode("utf-8")) > self.max_response_bytes:
+            raise AIProviderError("OpenAI response exceeds the configured size limit.")
 
         try:
             payload = json.loads(output_text)

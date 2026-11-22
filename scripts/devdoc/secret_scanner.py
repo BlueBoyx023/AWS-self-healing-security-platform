@@ -30,8 +30,23 @@ class SecretScanner:
         r"-----END (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----",
         re.DOTALL,
     )
+    DATABASE_URL = re.compile(
+        r"(?i)\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis)://[^\s\"'<>]+"
+    )
+    CREDENTIAL_URL = re.compile(
+        r"(?i)\bhttps?://[^/@\s:]+:[^/@\s]+@[^\s\"'<>]+"
+    )
+    JWT = re.compile(
+        r"(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])"
+    )
 
     PATTERNS = [
+        (
+            "OAuth token",
+            re.compile(
+                r"(?i)([\"']?(?:access_token|refresh_token|oauth_token)[\"']?\s*[:=]\s*[\"']?)([A-Za-z0-9._~+/=-]{12,})"
+            ),
+        ),
         (
             "AWS secret access key",
             re.compile(
@@ -79,15 +94,27 @@ class SecretScanner:
             contains_private_key = True
             findings.append("Private key material")
 
-            sanitized = self.PRIVATE_KEY_BLOCK.sub(
+            sanitized = self.PRIVATE_KEY_BLOCK.sub(self.REDACTED, sanitized)
+            # If no matching END marker exists, discard all remaining text
+            # after BEGIN because it may be partial key material.
+            sanitized = re.sub(
+                r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----.*$",
                 self.REDACTED,
                 sanitized,
+                flags=re.DOTALL,
             )
 
-            sanitized = self.PRIVATE_KEY_BEGIN.sub(
-                self.REDACTED,
-                sanitized,
-            )
+        if self.DATABASE_URL.search(sanitized):
+            findings.append("Database connection string")
+            sanitized = self.DATABASE_URL.sub(self.REDACTED, sanitized)
+
+        if self.CREDENTIAL_URL.search(sanitized):
+            findings.append("URL credentials")
+            sanitized = self.CREDENTIAL_URL.sub(self.REDACTED, sanitized)
+
+        if self.JWT.search(sanitized):
+            findings.append("JWT-like token")
+            sanitized = self.JWT.sub(self.REDACTED, sanitized)
 
         # Detect AWS permanent and temporary access key IDs.
         if self.AWS_ACCESS_KEY.search(sanitized):
@@ -124,6 +151,7 @@ class SecretScanner:
             elif description in {
                 "AWS secret access key",
                 "Generic API key",
+                "OAuth token",
             }:
                 sanitized = pattern.sub(
                     lambda match: match.group(1) + self.REDACTED,

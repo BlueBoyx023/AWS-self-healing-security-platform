@@ -31,7 +31,13 @@ class DraftGenerator:
         if not context:
             raise ValueError("Context cannot be empty.")
 
-        if not isinstance(document_type, str) or not document_type.strip():
+        if (
+            not isinstance(document_type, str)
+            or not document_type.strip()
+            or len(document_type) > 100
+            or len(document_type.split()) > 8
+            or any(not (char.isalnum() or char in " -_/") for char in document_type)
+        ):
             raise ValueError("Document type must be a non-empty string.")
 
         instruction = f"""

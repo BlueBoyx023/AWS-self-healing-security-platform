@@ -167,3 +167,45 @@ Use IAM roles instead of storing credentials.
 
     assert result.redacted_content == content
     assert result.findings == []
+
+
+@pytest.mark.parametrize("value", [
+    "postgresql://dev_user:synthetic-password@db.example.test:5432/app",
+    "mysql://dev_user:synthetic-password@db.example.test/app",
+])
+def test_detects_and_redacts_database_connection_credentials(scanner, value):
+    result = scanner.scan(value)
+    assert "synthetic-password" not in result.redacted_content
+    assert value not in result.redacted_content
+    assert "Database connection string" in result.findings
+
+
+def test_detects_and_redacts_jwt_like_credential(scanner):
+    token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzeW50aGV0aWMifQ.synthetic-signature"
+    result = scanner.scan("credential=" + token)
+    assert token not in result.redacted_content
+    assert "JWT-like token" in result.findings
+
+
+def test_redacts_credentials_embedded_in_https_url(scanner):
+    value = "https://synthetic-user:synthetic-password@example.test/path"
+    result = scanner.scan(value)
+    assert value not in result.redacted_content
+    assert "synthetic-password" not in result.redacted_content
+    assert "URL credentials" in result.findings
+
+
+@pytest.mark.parametrize("name", ["access_token", "refresh_token", "oauth_token"])
+def test_detects_oauth_token_assignments(scanner, name):
+    token = "synthetic-oauth-token-1234567890"
+    result = scanner.scan(f"{name}={token}")
+    assert token not in result.redacted_content
+    assert "OAuth token" in result.findings
+
+
+def test_incomplete_private_key_redacts_following_material(scanner):
+    content = "-----BEGIN PRIVATE KEY-----\nsynthetic-private-key-material\nother bytes"
+    result = scanner.scan(content)
+    assert result.contains_private_key
+    assert "synthetic-private-key-material" not in result.redacted_content
+    assert "other bytes" not in result.redacted_content

@@ -130,6 +130,54 @@ def test_context_limit_is_checked_before_sdk_invocation():
     assert client.responses.calls == []
 
 
+def test_full_request_limit_includes_instruction():
+    client = FakeClient(make_response("Draft"))
+    provider = OpenAIProvider(client=client, max_context_bytes=12)
+    with pytest.raises(AIProviderError, match="size limit"):
+        provider.generate(AIRequest("I" * 100, {"files": []}))
+    assert client.responses.calls == []
+
+
+def test_rejects_oversized_response_before_parsing():
+    client = FakeClient(SimpleNamespace(
+        status="completed", output_text='{"content":"' + ("x" * 500) + '"}'
+    ))
+    provider = OpenAIProvider(client=client, max_response_bytes=100)
+    with pytest.raises(AIProviderError, match="size limit"):
+        provider.generate(AIRequest("Generate docs", {"files": []}))
+
+
+@pytest.mark.parametrize("usage", [
+    SimpleNamespace(input_tokens=-1, output_tokens=4),
+    SimpleNamespace(input_tokens=True, output_tokens=4),
+])
+def test_invalid_response_metadata_is_ignored(usage):
+    response = make_response("Draft", _request_id=object(), usage=usage)
+    result = OpenAIProvider(client=FakeClient(response)).generate(
+        AIRequest("Generate docs", {"files": []})
+    )
+    assert "input_tokens" not in result.metadata
+    assert result.metadata["output_tokens"] == 4
+
+
+def test_secret_like_request_id_is_omitted_from_metadata():
+    response = make_response("Draft", _request_id="ghp_" + ("A" * 30))
+    result = OpenAIProvider(client=FakeClient(response)).generate(
+        AIRequest("Generate docs", {"files": []})
+    )
+    assert result.metadata == {}
+
+
+def test_api_exception_with_credentials_is_sanitized():
+    secret = "synthetic-api-secret-1234567890"
+    error_type = type("UnexpectedSDKError", (Exception,), {})
+    provider = OpenAIProvider(client=FakeClient(error=error_type(secret)))
+    with pytest.raises(AIProviderError) as exc_info:
+        provider.generate(AIRequest("Generate docs", {"files": []}))
+    assert secret not in str(exc_info.value)
+    assert secret not in repr(exc_info.value.__cause__)
+
+
 @pytest.mark.parametrize(
     ("error_name", "expected_message"),
     [
@@ -165,6 +213,8 @@ def test_sanitizes_sdk_failures(error_name, expected_message):
         {"max_retries": True},
         {"max_context_bytes": 0},
         {"max_context_bytes": True},
+        {"max_response_bytes": 0},
+        {"max_response_bytes": True},
     ],
 )
 def test_rejects_invalid_configuration(kwargs):

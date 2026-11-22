@@ -75,14 +75,18 @@ class AIProvider(ABC):
         # Inspect the complete serialized request, including nested context.
         import json
 
-        serialized_request = json.dumps(
-            {
-                "instruction": request.instruction,
-                "context": request.context,
-            },
-            ensure_ascii=True,
-            default=str,
-        )
+        try:
+            serialized_request = json.dumps(
+                {
+                    "instruction": request.instruction,
+                    "context": request.context,
+                },
+                ensure_ascii=True,
+            )
+        except (TypeError, ValueError, RecursionError):
+            raise AIRequestSecurityError(
+                "Request rejected: context contains unsupported values."
+            ) from None
 
         scan_result = self.secret_scanner.scan(serialized_request)
 

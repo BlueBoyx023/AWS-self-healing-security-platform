@@ -282,3 +282,42 @@ def test_ai_provider_rejects_secret_without_exposing_it_in_error():
 
     assert secret not in str(exc_info.value)
     assert provider.called is False
+
+
+def test_ai_provider_rejects_nested_database_secret_before_outbound_call():
+    provider = TrackingProvider()
+    request = AIRequest("Generate docs", {"items": [{
+        "url": "postgresql://dev:synthetic-db-password@db.example.test/app"
+    }]})
+    with pytest.raises(AIRequestSecurityError):
+        provider.generate(request)
+    assert provider.called is False
+
+
+def test_ai_provider_rejects_nested_jwt_before_outbound_call():
+    provider = TrackingProvider()
+    token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzeW50aGV0aWMifQ.synthetic-signature"
+    with pytest.raises(AIRequestSecurityError):
+        provider.generate(AIRequest("Generate docs", {"items": [token]}))
+    assert provider.called is False
+
+
+def test_ai_provider_rejects_oauth_refresh_token_before_outbound_call():
+    provider = TrackingProvider()
+    with pytest.raises(AIRequestSecurityError):
+        provider.generate(AIRequest("Generate docs", {"tokens": {
+            "refresh_token": "synthetic-oauth-token-1234567890"
+        }}))
+    assert provider.called is False
+
+
+def test_ai_provider_rejects_custom_object_without_stringifying_it():
+    provider = TrackingProvider()
+
+    class Dangerous:
+        def __str__(self):
+            raise AssertionError("__str__ must not run")
+
+    with pytest.raises(AIRequestSecurityError):
+        provider.generate(AIRequest("Generate docs", {"value": Dangerous()}))
+    assert provider.called is False
