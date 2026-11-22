@@ -4,7 +4,7 @@
 **Event-Driven Cloud Security Detection, Automated Remediation & Verification**
 
 [![Python](https://img.shields.io/badge/Python-3.14-blue)](https://www.python.org/)
-[![Testing](https://img.shields.io/badge/Tests-91%20Passed-success)](screenshots/README.md)
+[![Testing](https://img.shields.io/badge/Tests-282%20Passed-success)](documentation/test_results.json)
 [![Status](https://img.shields.io/badge/Status-Under%20Development-orange)](#project-status)
 [![AWS](https://img.shields.io/badge/Cloud-AWS-orange)](https://aws.amazon.com/)
 
@@ -17,6 +17,8 @@ The AWS Self-Healing Security Platform is an event-driven cloud security automat
 The platform aims to reduce manual security intervention through controlled, policy-driven remediation while maintaining accountability, auditability, and operational safety.
 
 The initial implementation focuses on securing Amazon S3 buckets against unintended public access.
+
+The repository also includes DevDoc, a local documentation assistant that reviews Git changes, filters project context, and returns drafts for human review. DevDoc does not publish or save drafts automatically. Its separate AI security controls and limitations are documented in [DevDoc AI Security Controls](docs/devdoc-security.md).
 
 **Development approach:** Local-first implementation using Python, automated tests, and mocked AWS interactions before live AWS integration.
 
@@ -133,15 +135,20 @@ The platform uses Python unit tests and mocked AWS responses during local develo
 
 | Metric | Result |
 |---|---:|
-| Tests passed | 91 |
+| Tests passed | 282 |
 | Subtests passed | 9 |
 | Test failures | 0 |
 | Test framework | pytest |
-| Execution environment | Local Python virtual environment |
+| Execution environment | Repository Python virtual environment |
+| Skipped tests | 0 |
 
-### 6.2 Test Execution Evidence
+Command: `python -m pytest -v --tb=short`
 
-![Local Test Results](screenshots/test-results-91-passed.png)
+Detailed machine-readable results: [`documentation/test_results.json`](documentation/test_results.json).
+
+### 6.2 Historical Test Execution Evidence
+
+The screenshot in `screenshots/` records an earlier 91-test run from 19 November 2026. It is retained as historical evidence and does not represent the latest test result.
 
 See the [Screenshots & Evidence](screenshots/README.md) directory for additional implementation and testing evidence.
 
@@ -181,15 +188,19 @@ See the [Screenshots & Evidence](screenshots/README.md) directory for additional
 - [x] Event identifier security validation
 - [x] Non-string event identifier rejection
 - [x] Initial test execution evidence
+- [x] Documentation automation tools and validation tests
+- [x] DevDoc AI outbound security hardening
 
 ### In Progress / Planned
 
-- [ ] Additional adversarial security testing
+- [ ] DevDoc prompt-injection testing for untrusted project-file content
+- [ ] Additional AWS adversarial security testing
 - [ ] Enhanced S3 resource identifier validation
 - [ ] AWS region validation
 - [ ] Further orchestrator security testing
-- [ ] Security documentation and threat model validation
+- [x] Update and validate security documentation and threat model (22 November 2026)
 - [ ] AWS infrastructure implementation
+- [ ] Least-privilege IAM policy design and review
 - [ ] Isolated AWS integration testing
 - [ ] Terraform deployment
 - [ ] End-to-end AWS remediation testing
@@ -216,48 +227,25 @@ Before live deployment:
 
 ```text
 AWS-self-healing-security-platform/
-│
-├── architecture/
-│   ├── architecture.md
-│   └── images/
-│       └── reference-multi-account-architecture.jpg
-│
-├── docs/
-│   ├── README.md
-│   ├── RESUME_CHECKPOINT.md
-│   ├── security-design.md
-│   └── threat-model.md
-│
-├── lambda/
-│   └── remediation_engine/
-│       ├── audit_logger.py
-│       ├── error_handler.py
-│       ├── event_validator.py
-│       ├── idempotency.py
-│       ├── metrics.py
-│       ├── orchestrator.py
-│       ├── policy_engine.py
-│       ├── remediation_engine.py
-│       └── verification_engine.py
-│
-├── policies/
-├── screenshots/
-│   ├── README.md
-│   └── test-results-91-passed.png
-│
-├── terraform/
-├── tests/
-│
-├── PROJECT_STATUS.md
-├── README.md
-└── LICENSE
++-- architecture/              Current and reference AWS architecture
++-- docs/                      AWS security docs, DevDoc security, checkpoint
++-- documentation/             Project status and verified test report
++-- lambda/remediation_engine/  AWS remediation application modules
++-- policies/                  Reserved for future policy definitions
++-- scripts/
+|   +-- devdoc/                 Documentation assistant
+|   +-- generate_docs.py        Markdown inventory generator
+|   +-- validate_docs.py        Documentation consistency checks
+|   +-- update_test_results.py  Full test report updater
++-- terraform/                 Reserved for future deployment configuration
++-- tests/                     AWS, DevDoc, and documentation-tool tests
++-- PROJECT_STATUS.md
++-- README.md
 ```
 
 ## 11. Project Status
 
 **Status:** Under Development — Local implementation and automated testing.
-
-**Latest verified test checkpoint:** 91 tests passed, 9 subtests passed.
 
 **AWS deployment:** Pending isolated AWS integration and deployment testing.
 

@@ -153,7 +153,7 @@ def main() -> int:
         "completed_at_utc": completed_at.isoformat(),
         "python_version": sys.version.split()[0],
         "pytest_version": importlib.metadata.version("pytest"),
-        "command": "python -m pytest -q",
+        "command": "python -m pytest -q --junitxml=<temporary report>",
         "exit_code": process.returncode,
         "test_counts": test_counts,
         "subtest_counts": extract_subtests(combined_output),

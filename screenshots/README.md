@@ -6,18 +6,20 @@
 
 This directory stores screenshots and visual evidence demonstrating the implementation, testing, and development progress of the AWS Self-Healing Security Platform.
 
-## 1. Local Test Execution Evidence
+## 1. Historical Local Test Execution Evidence
 
-### Latest Verified Test Results
+### Historical Test Results — 19 November 2026
 
 ![Local Test Results](test-results-91-passed.png)
 
-**Test results:**
+**Test results at the time of capture:**
 - 91 tests passed
 - 9 subtests passed
 - Execution time: 1.23 seconds
 - Environment: Local Python virtual environment
 - Test framework: pytest
+
+This screenshot is retained as historical evidence and is not the latest test checkpoint. The latest verified result is 282 tests and 9 subtests passed, with 0 skipped, on 22 November 2026. See `documentation/test_results.json` for the current machine-readable report.
 
 **Evidence type:** Local automated testing. This is not evidence of live AWS execution.
 
@@ -44,7 +46,7 @@ The following evidence will be added as development progresses:
 
 ## 4. Development Status
 
-**Local testing evidence:** Available.
+**Historical local testing evidence:** Available. Current results are recorded in `documentation/test_results.json`.
 
 **AWS integration evidence:** Pending isolated AWS integration testing.
 

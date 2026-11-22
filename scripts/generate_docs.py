@@ -27,7 +27,7 @@ def discover_markdown_files():
         relative_path = path.relative_to(PROJECT_ROOT)
 
         if any(
-            part in EXCLUDED_DIRECTORIES
+            part in EXCLUDED_DIRECTORIES or part.startswith(".pytest-tmp")
             for part in relative_path.parts
         ):
             continue

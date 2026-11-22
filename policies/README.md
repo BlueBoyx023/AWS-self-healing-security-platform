@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This directory contains security policy definitions and IAM permission configurations for the platform.
+This directory is reserved for security policy definitions and IAM permission configurations. It currently contains this planning document; policy files have not yet been implemented.
 
 ## Planned Components
 

@@ -118,15 +118,15 @@ The application workflow is implemented and locally unit tested. Live AWS deploy
 
 ## 8. Testing and Evidence
 
-Local pytest execution was verified on 19 November 2026:
+Local pytest execution was verified on 22 November 2026:
 
-- 91 tests passed.
+- 282 tests passed.
 - 9 subtests passed.
-- No test failures were reported.
+- No test failures or skipped tests were reported.
 - Unit tests use mocked AWS service clients.
 - All eight documented functional test scenarios have matching test coverage.
 
-These results establish local application test coverage, not live AWS integration or production IAM validation.
+The earlier 91-test screenshot is historical evidence. Current machine-readable results are recorded in `documentation/test_results.json`. These results establish local application test coverage, not live AWS integration or production IAM validation.
 
 ## 9. Residual Risks
 

@@ -91,3 +91,7 @@ Future architecture development may consider:
 | Target AWS deployment | Planned |
 | Multi-account reference design | Documented reference |
 | Live AWS integration | Pending |
+
+## 7. DevDoc Documentation Assistant
+
+DevDoc is a local repository documentation workflow, separate from the AWS remediation runtime. It analyzes Git changes, classifies them, builds bounded context while filtering detected secrets, requests a documentation draft through the vendor-neutral AI provider interface, and returns the draft with a review result. It does not save or publish generated documentation automatically. The OpenAI adapter is optional and external API calls require its configured provider. See [DevDoc AI Security Controls](../docs/devdoc-security.md) for outbound checks and their limitations.

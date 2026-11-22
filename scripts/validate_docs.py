@@ -3,6 +3,7 @@
 import json
 import re
 import sys
+from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -19,6 +20,7 @@ REQUIRED_FILES = [
     "docs/RESUME_CHECKPOINT.md",
     "docs/security-design.md",
     "docs/threat-model.md",
+    "docs/devdoc-security.md",
     "tests/README.md",
     "tests/test_plan.md",
 ]
@@ -285,6 +287,33 @@ def validate_test_results() -> None:
                     f"({junit_total})."
                 )
 
+        # A passing full-suite report is the evidence represented by the
+        # project's last verified checkpoint. Failed runs do not advance it.
+        if data.get("status") == "passed" and STATUS_FILE.exists():
+            try:
+                project_status = json.loads(
+                    STATUS_FILE.read_text(encoding="utf-8-sig")
+                )
+                checkpoint = project_status.get("development", {}).get(
+                    "last_verified_checkpoint"
+                )
+                completed_at = data.get("completed_at_utc")
+                if isinstance(checkpoint, str) and isinstance(completed_at, str):
+                    checkpoint_date = date.fromisoformat(checkpoint)
+                    report_date = datetime.fromisoformat(
+                        completed_at.replace("Z", "+00:00")
+                    ).date()
+                    if checkpoint_date != report_date:
+                        ERRORS.append(
+                            "Project last_verified_checkpoint date "
+                            f"({checkpoint_date}) does not match the passing "
+                            f"test report date ({report_date})."
+                        )
+            except (json.JSONDecodeError, OSError, TypeError, ValueError):
+                ERRORS.append(
+                    "Unable to compare project checkpoint date with test report date."
+                )
+
     except (json.JSONDecodeError, OSError) as error:
         ERRORS.append(
             f"Test results JSON error: {error}"
@@ -306,7 +335,10 @@ def validate_markdown_links() -> None:
     for source in markdown_files:
         relative = source.relative_to(PROJECT_ROOT)
 
-        if any(part in excluded for part in relative.parts):
+        if any(
+            part in excluded or part.startswith(".pytest-tmp")
+            for part in relative.parts
+        ):
             continue
 
         try:

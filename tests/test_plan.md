@@ -27,6 +27,10 @@ Validate that the platform detects security events, rejects unauthorized request
 - Verify remediation authorization through the application-level allowlist.
 - Least-privilege AWS IAM validation remains pending.
 
+### DevDoc Security Coverage
+
+The DevDoc tests use synthetic credentials and mocked provider clients. Current coverage includes nested secret rejection, database credential URLs, JWT-like values, OAuth tokens, custom object serialization, document-type validation, response-size limits, sanitized API errors, response metadata checks, incomplete private-key redaction, and secret rejection before outbound requests. Prompt injection embedded in project-file content remains a recommended test area.
+
 ## 4. Evidence Collection
 
 For each test, record:
@@ -46,14 +50,16 @@ Live AWS integration tests will be performed later in an isolated test environme
 
 ## 6. Current Status
 
-Unit test execution verified on 19 November 2026.
+Full unit test execution verified on 22 November 2026.
 
-- 91 tests passed.
+- 282 tests passed.
 - 9 subtests passed.
-- No test failures reported.
+- 0 failures and 0 skipped tests.
 - All eight documented functional scenarios have matching test coverage.
 - AWS interactions are validated using mocked clients.
 - Live AWS integration testing remains pending.
 - AWS IAM least-privilege policy implementation and validation remain pending.
 
 Test evidence: Local pytest execution.
+
+Machine-readable latest report: `documentation/test_results.json`. The screenshot documenting the earlier 91-test run is historical evidence only.

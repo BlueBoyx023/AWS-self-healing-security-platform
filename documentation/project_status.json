@@ -16,8 +16,8 @@
     "stage": "local_implementation_and_testing",
     "deployment_status": "not_deployed",
     "default_dry_run": true,
-    "last_verified_checkpoint": "2026-11-19",
-    "current_milestone": "documentation_automation"
+    "last_verified_checkpoint": "2026-11-22",
+    "current_milestone": "devdoc_security_hardening_complete_prompt_injection_tests_next"
   },
   "components": [
     {"id": "event_validator", "name": "Event Validation", "status": "implemented"},
@@ -30,7 +30,9 @@
     {"id": "error_handler", "name": "Centralized Error Handler", "status": "implemented"},
     {"id": "idempotency", "name": "Idempotency Management", "status": "implemented"},
     {"id": "lease_processing", "name": "Lease-Based Event Processing", "status": "implemented"},
-    {"id": "stale_event_recovery", "name": "Stale-Event Recovery", "status": "implemented"}
+    {"id": "stale_event_recovery", "name": "Stale-Event Recovery", "status": "implemented"},
+    {"id": "devdoc", "name": "DevDoc Documentation Assistant", "status": "implemented_local_review_workflow"},
+    {"id": "documentation_tools", "name": "Documentation Inventory and Validation Tools", "status": "implemented"}
   ],
   "security_controls": [
     {"id": "event_validation", "status": "implemented"},
@@ -41,7 +43,9 @@
     {"id": "lease_ownership", "status": "implemented"},
     {"id": "post_remediation_verification", "status": "implemented"},
     {"id": "structured_audit_logging", "status": "implemented"},
-    {"id": "centralized_error_handling", "status": "implemented"}
+    {"id": "centralized_error_handling", "status": "implemented"},
+    {"id": "devdoc_outbound_secret_checks", "status": "implemented_and_locally_tested"},
+    {"id": "devdoc_human_review_no_auto_publish", "status": "implemented"}
   ],
   "production_requirements": [
     {"id": "iam_least_privilege", "status": "pending"},
@@ -56,7 +60,8 @@
   "documentation": {
     "human_review_required": [
       "docs/security-design.md",
-      "docs/threat-model.md"
+      "docs/threat-model.md",
+      "docs/devdoc-security.md"
     ],
     "generated_output": [
       "docs/generated/documentation_inventory.md"

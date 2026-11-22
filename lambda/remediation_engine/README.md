@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This directory will contain the Python-based AWS security remediation engine.
+This directory contains the Python application modules for the AWS security remediation workflow. The code is implemented and tested locally; it has not been deployed as an AWS Lambda function.
 
 ## Responsibilities
 
@@ -19,4 +19,4 @@ Remediate unintended public access to an S3 bucket in an isolated test environme
 
 ## Development Status
 
-Planned — implementation has not started.
+Application modules and mocked unit tests are implemented. AWS Lambda packaging, least-privilege execution-role policy, deployment, and live integration remain pending.

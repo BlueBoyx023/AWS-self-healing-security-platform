@@ -6,6 +6,8 @@ Provide controlled, authorized, and auditable remediation of unintended public a
 
 The platform validates incoming security events, evaluates remediation authorization, applies predefined security controls, verifies the resulting configuration, and records workflow outcomes.
 
+This document covers the AWS remediation application. DevDoc's AI-provider security controls are documented separately in [DevDoc AI Security Controls](devdoc-security.md).
+
 The current implementation is designed for local development and testing. Production deployment controls remain subject to further implementation and validation.
 
 ## 2. Identity and Access Management
@@ -207,13 +209,15 @@ The following controls remain planned or require further validation:
 
 ## 13. Testing and Validation
 
-The local pytest suite was executed on 19 November 2026.
+The local pytest suite was executed on 22 November 2026.
 
-- 91 tests passed.
+- 282 tests passed.
 - 9 subtests passed.
-- No test failures were reported.
+- No test failures or skipped tests were reported.
 - AWS interactions were tested using mocked clients.
 - Live AWS integration and IAM least-privilege validation remain pending.
+
+The earlier 91-test screenshot is historical evidence. The current machine-readable report is `documentation/test_results.json`.
 
 ## 14. Implementation Status
 
