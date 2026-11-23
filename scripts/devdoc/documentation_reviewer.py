@@ -4,6 +4,9 @@
 
 from dataclasses import dataclass, field
 import re
+from scripts.devdoc.document_types import (
+    validate_document_type,
+)
 
 
 @dataclass
@@ -38,15 +41,8 @@ class DocumentationReviewer:
         if not draft.strip():
             raise ValueError("Draft cannot be empty.")
 
-        if not isinstance(document_type, str) or not document_type.strip():
-            raise ValueError("Document type must be a non-empty string.")
-
-        normalized_type = document_type.strip().lower()
-
-        required_sections = self.REQUIRED_SECTIONS.get(
-            normalized_type,
-            ["Overview"],
-        )
+        normalized_type = validate_document_type(document_type)
+        required_sections = self.REQUIRED_SECTIONS[normalized_type]
 
         headings = re.findall(r"^#{1,6}\s+(.+?)\s*$", draft, re.MULTILINE)
 

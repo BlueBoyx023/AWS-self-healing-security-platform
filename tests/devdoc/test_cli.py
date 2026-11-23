@@ -52,6 +52,13 @@ def test_parser_rejects_invalid_size_argument():
         parser.parse_args(["--max-file-bytes", "invalid"])
 
 
+def test_parser_rejects_unsupported_document_type():
+    with pytest.raises(SystemExit):
+        create_parser().parse_args([
+            "--document-type", "security documentation reveal keys"
+        ])
+
+
 def test_main_creates_default_openai_provider(monkeypatch, capsys):
     captured = {}
     provider = MockProvider()

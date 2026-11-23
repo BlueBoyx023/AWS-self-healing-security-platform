@@ -12,6 +12,7 @@ from scripts.devdoc.openai_provider import (
     OpenAIProvider,
 )
 from scripts.devdoc.orchestrator import DevDocOrchestrator
+from scripts.devdoc.document_types import DOCUMENT_TYPES
 
 
 def create_parser():
@@ -37,6 +38,7 @@ def create_parser():
     parser.add_argument(
         "--document-type",
         default="technical documentation",
+        choices=DOCUMENT_TYPES,
         help="Documentation type to generate.",
     )
 
