@@ -68,7 +68,8 @@ def test_orchestrator_runs_complete_workflow(monkeypatch):
     }
 
     draft = AIResponse(
-        content="# Overview\n" + ("Project details. " * 10),
+        content=("# Overview\n" + ("Project details. " * 10)
+                 + "\n# Security Considerations\nDetails.\n# Testing\nTests."),
         provider="mock",
         model="test-model",
     )
@@ -203,7 +204,8 @@ def test_orchestrator_uses_default_baseline(monkeypatch):
 
         def generate_draft(self, context, document_type):
             return AIResponse(
-                content="# Overview\n" + ("Details. " * 20),
+                content=("# Overview\n" + ("Details. " * 20)
+                         + "\n# Implementation\nDetails.\n# Testing\nTests."),
                 provider="mock",
                 model="test-model",
             )
