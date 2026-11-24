@@ -20,6 +20,33 @@ def test_valid_output_passes(validator):
     assert result.issues == []
 
 
+@pytest.mark.parametrize("secret", [
+    "AKIAIOSFODNN7EXAMPLE",
+    "synthetic-api-key-value-1234567890",
+    "Bearer abcdefghijklmnopqrstuvwxyz123456",
+])
+def test_reproduced_credentials_are_reported_and_redacted(validator, secret):
+    credential = f"api_key = {secret}" if secret.startswith("synthetic-") else secret
+    result = validator.validate(valid_draft() + "\n\n" + credential)
+    assert result.valid is False
+    assert result.secret_findings
+    assert secret not in result.sanitized_content
+    assert "[REDACTED]" in result.sanitized_content
+
+
+def test_scanner_failure_fails_closed_and_withholds_output():
+    class BrokenScanner:
+        def scan(self, content):
+            raise RuntimeError("synthetic scanner failure")
+
+    result = OutputValidator(secret_scanner=BrokenScanner()).validate(valid_draft())
+    assert result.valid is False
+    assert result.sanitized_content == (
+        "# Output validation failed\nGenerated content was withheld."
+    )
+    assert result.issues == ["Generated output could not be security validated."]
+
+
 @pytest.mark.parametrize("content", ["", "   ", "Plain output without headings."])
 def test_malformed_output_is_blocked(validator, content):
     result = validator.validate(content)

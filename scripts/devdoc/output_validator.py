@@ -5,6 +5,7 @@ import re
 
 from scripts.devdoc.document_types import validate_document_type
 from scripts.devdoc.documentation_reviewer import DocumentationReviewer
+from scripts.devdoc.secret_scanner import SecretScanner
 
 
 @dataclass
@@ -29,6 +30,9 @@ class OutputValidator:
         "technical documentation": {"security considerations", "architecture", "components"},
     }
 
+    def __init__(self, secret_scanner=None):
+        self.secret_scanner = secret_scanner or SecretScanner()
+
     def validate(self, content, document_type="technical documentation"):
         """Validate output without executing or modifying generated content."""
         document_type = validate_document_type(document_type)
@@ -49,7 +53,22 @@ class OutputValidator:
         if output_size > self.MAX_OUTPUT_BYTES:
             issues.append("Generated output exceeds the maximum size.")
 
-        headings = re.findall(r"^#{1,6}\s+(.+?)\s*$", content, re.MULTILINE)
+        try:
+            scan = self.secret_scanner.scan(content)
+        except Exception:
+            return OutputValidationResult(
+                False,
+                "# Output validation failed\nGenerated content was withheld.",
+                ["Generated output could not be security validated."],
+            )
+        if scan.findings:
+            issues.extend(
+                f"Generated output contains {finding.lower()}."
+                for finding in dict.fromkeys(scan.findings)
+            )
+        safe_content = scan.redacted_content
+
+        headings = re.findall(r"^#{1,6}\s+(.+?)\s*$", safe_content, re.MULTILINE)
         normalized = {heading.strip().lower() for heading in headings}
         if not headings:
             issues.append("Generated output contains no Markdown headings.")
@@ -62,6 +81,7 @@ class OutputValidator:
 
         return OutputValidationResult(
             valid=not issues,
-            sanitized_content=content,
+            sanitized_content=safe_content,
             issues=issues,
+            secret_findings=list(dict.fromkeys(scan.findings)),
         )
