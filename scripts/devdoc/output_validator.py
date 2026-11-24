@@ -29,6 +29,13 @@ class OutputValidator:
         "architecture documentation": {"security considerations", "implementation"},
         "technical documentation": {"security considerations", "architecture", "components"},
     }
+    UNSAFE_COMMANDS = re.compile(
+        r"(?im)(?:^\s*(?:\$\s*)?|\b(?:unauthorized command|run this command)\s*:\s*)"
+        r"(?:sudo\s+|powershell(?:\.exe)?\s+|pwsh\s+|cmd(?:\.exe)?\s+/c\s+|"
+        r"bash\s+-c\s+|curl\s+[^\n|]*\|\s*(?:sh|bash)|"
+        r"rm\s+-rf\s+|aws\s+(?:iam\s+create|s3\s+rm|ec2\s+terminate)|"
+        r"(?:chmod\s+777|mkfs(?:\.|\s)|dd\s+if=))",
+    )
 
     def __init__(self, secret_scanner=None):
         self.secret_scanner = secret_scanner or SecretScanner()
@@ -78,6 +85,9 @@ class OutputValidator:
         drift = self.OTHER_TYPE_SECTIONS[document_type].intersection(normalized)
         if drift:
             issues.append("Generated output contains headings associated with another document type: " + ", ".join(sorted(drift)) + ".")
+
+        if self.UNSAFE_COMMANDS.search(safe_content):
+            issues.append("Generated output contains a potentially unauthorized command.")
 
         return OutputValidationResult(
             valid=not issues,

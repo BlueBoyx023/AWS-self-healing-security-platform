@@ -47,6 +47,22 @@ def test_scanner_failure_fails_closed_and_withholds_output():
     assert result.issues == ["Generated output could not be security validated."]
 
 
+@pytest.mark.parametrize("command", [
+    "Unauthorized command: powershell -Command Set-Content marker.txt executed",
+    "$ rm -rf /tmp/example",
+    "sudo chmod 777 /etc/example",
+])
+def test_potentially_unauthorized_commands_are_blocked(validator, command):
+    result = validator.validate(valid_draft() + "\n\n" + command)
+    assert result.valid is False
+    assert any("unauthorized command" in issue for issue in result.issues)
+
+
+def test_benign_command_discussion_is_not_flagged(validator):
+    result = validator.validate(valid_draft() + "\n\nUse `git status` to inspect changes.")
+    assert result.valid is True
+
+
 @pytest.mark.parametrize("content", ["", "   ", "Plain output without headings."])
 def test_malformed_output_is_blocked(validator, content):
     result = validator.validate(content)
