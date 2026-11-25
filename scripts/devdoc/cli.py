@@ -126,6 +126,29 @@ def main(argv=None, provider=None):
         for key, value in result["context_summary"].items():
             print(f"{key}: {value}")
 
+        if result.get("eligible_for_human_review") is not True:
+            print("\n=== BLOCKED: OUTPUT NOT ELIGIBLE FOR HUMAN REVIEW ===")
+            print("Output validation failed. This draft is blocked from the normal review workflow.")
+
+            validation_issues = result.get("validation_failures")
+            if validation_issues is None:
+                validation = result.get("output_validation")
+                validation_issues = getattr(validation, "issues", None)
+            if validation_issues is None:
+                validation_issues = result["review"].issues
+
+            for issue in validation_issues:
+                print(f"VALIDATION FAILURE: {issue}")
+
+            print("\n=== BLOCKED OUTPUT (DIAGNOSTIC ONLY) ===")
+            print("This content is not review-ready and must not be accepted as documentation.")
+            print(result["draft"].content)
+
+            print("\n=== PUBLICATION STATUS ===")
+            print("Human approval required: Yes")
+            print("Written to disk: No")
+            return 1
+
         print("\n=== GENERATED DOCUMENTATION DRAFT ===")
         print(result["draft"].content)
 

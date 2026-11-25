@@ -71,7 +71,8 @@ class DevDocOrchestrator:
             draft = replace(draft, content=output_validation.sanitized_content)
 
         # Security or integrity failures block the ordinary review path.
-        if output_validation.valid:
+        eligible_for_human_review = output_validation.valid is True
+        if eligible_for_human_review:
             review = self.documentation_reviewer.review(
                 draft=draft.content,
                 document_type=document_type,
@@ -92,7 +93,8 @@ class DevDocOrchestrator:
             "draft": draft,
             "review": review,
             "output_validation": output_validation,
-            "eligible_for_human_review": output_validation.valid,
+            "eligible_for_human_review": eligible_for_human_review,
+            "validation_failures": list(output_validation.issues),
             "requires_human_approval": True,
             "written_to_disk": False,
         }

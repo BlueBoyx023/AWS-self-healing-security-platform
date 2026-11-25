@@ -270,3 +270,28 @@ def test_orchestrator_never_claims_to_write_files():
 
     assert not hasattr(orchestrator, "write_documentation")
     assert not hasattr(orchestrator, "save_draft")
+
+
+def test_invalid_output_never_reaches_normal_reviewer(monkeypatch):
+    orchestrator = DevDocOrchestrator(".", MockProvider())
+    orchestrator.git_analyzer.analyze = lambda baseline: {"changes": []}
+    orchestrator.change_classifier.classify = lambda report: {"classifications": []}
+    orchestrator.context_builder.build = lambda report: {"files": [], "summary": {}}
+    orchestrator.draft_generator.generate_draft = lambda **kwargs: AIResponse(
+        content=("# Overview\nDetails.\n# Implementation\nDetails.\n"
+                 "# Testing\nTests.\n- sudo rm -rf /tmp/example"),
+        provider="mock",
+        model="test-model",
+    )
+
+    class ReviewerMustNotRun:
+        def review(self, **kwargs):
+            pytest.fail("invalid output reached the normal reviewer")
+
+    orchestrator.documentation_reviewer = ReviewerMustNotRun()
+
+    result = orchestrator.run()
+
+    assert result["eligible_for_human_review"] is False
+    assert result["review"].approved is False
+    assert any("unauthorized command" in issue for issue in result["review"].issues)

@@ -1,6 +1,6 @@
 # Documentation Inventory
 
-Generated: 2026-11-25T04:45:35.557976+00:00
+Generated: 2026-11-25T06:49:57.924343+00:00
 
 Total Markdown documents: 14
 
@@ -9,7 +9,7 @@ Total Markdown documents: 14
 | Document | Size (bytes) | Review requirement |
 |---|---:|---|
 | `architecture/architecture.md` | 3534 | Standard |
-| `docs/devdoc-security.md` | 3520 | Human review required |
+| `docs/devdoc-security.md` | 5289 | Human review required |
 | `docs/README.md` | 1382 | Standard |
 | `docs/RESUME_CHECKPOINT.md` | 11437 | Standard |
 | `docs/security-design.md` | 8807 | Human review required |
