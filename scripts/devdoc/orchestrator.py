@@ -2,11 +2,15 @@
 
 """Coordinate the DevDoc documentation workflow."""
 
+from dataclasses import replace
+
 from scripts.devdoc.change_classifier import ChangeClassifier
 from scripts.devdoc.context_builder import ContextBuilder
 from scripts.devdoc.documentation_reviewer import DocumentationReviewer
 from scripts.devdoc.draft_generator import DraftGenerator
 from scripts.devdoc.git_analyzer import GitChangeAnalyzer
+from scripts.devdoc.output_validator import OutputValidator
+from scripts.devdoc.documentation_reviewer import ReviewResult
 
 
 class DevDocOrchestrator:
@@ -32,6 +36,7 @@ class DevDocOrchestrator:
         )
         self.draft_generator = DraftGenerator(ai_provider)
         self.documentation_reviewer = DocumentationReviewer()
+        self.output_validator = OutputValidator()
 
     def run(self, document_type="technical documentation"):
         """Run the workflow and return drafts for human review."""
@@ -57,11 +62,28 @@ class DevDocOrchestrator:
             document_type=document_type,
         )
 
-        # Step 5: Review the generated draft.
-        review = self.documentation_reviewer.review(
-            draft=draft.content,
+        # Step 5: Inspect provider output before allowing it into human review.
+        output_validation = self.output_validator.validate(
+            content=draft.content,
             document_type=document_type,
         )
+        if output_validation.sanitized_content != draft.content:
+            draft = replace(draft, content=output_validation.sanitized_content)
+
+        # Security or integrity failures block the ordinary review path.
+        eligible_for_human_review = output_validation.valid is True
+        if eligible_for_human_review:
+            review = self.documentation_reviewer.review(
+                draft=draft.content,
+                document_type=document_type,
+            )
+        else:
+            review = ReviewResult(
+                approved=False,
+                issues=list(output_validation.issues),
+                warnings=[],
+                sections_found=[],
+            )
 
         # Step 6: Return results without modifying project files.
         return {
@@ -70,6 +92,9 @@ class DevDocOrchestrator:
             "context_summary": context.get("summary", {}),
             "draft": draft,
             "review": review,
+            "output_validation": output_validation,
+            "eligible_for_human_review": eligible_for_human_review,
+            "validation_failures": list(output_validation.issues),
             "requires_human_approval": True,
             "written_to_disk": False,
         }

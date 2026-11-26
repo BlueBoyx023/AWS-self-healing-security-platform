@@ -171,11 +171,13 @@ def test_malicious_ai_output_remains_untrusted_and_inert(git_repository):
     assert provider.requests[0].context["trust_boundary"] == (
         "UNTRUSTED_REPOSITORY_EVIDENCE"
     )
-    assert result["draft"].content == malicious_output
-    assert synthetic_secret in result["draft"].content
+    assert result["draft"].content != malicious_output
+    assert synthetic_secret not in result["draft"].content
+    assert "[REDACTED]" in result["draft"].content
     assert "Unauthorized command:" in result["draft"].content
-    assert "Missing required section: Architecture" in result["review"].issues
-    assert "Missing required section: Components" in result["review"].issues
+    assert any("contains aws access key" in issue for issue in result["review"].issues)
+    assert any("unauthorized command" in issue for issue in result["review"].issues)
+    assert result["eligible_for_human_review"] is False
     assert result["requires_human_approval"] is True
     assert result["written_to_disk"] is False
     assert not command_marker.exists()

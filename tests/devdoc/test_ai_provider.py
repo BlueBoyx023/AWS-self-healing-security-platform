@@ -311,6 +311,27 @@ def test_ai_provider_rejects_oauth_refresh_token_before_outbound_call():
     assert provider.called is False
 
 
+@pytest.mark.parametrize(
+    ("name", "secret"),
+    [
+        ("stripe_secret_key", "sk_" + "live_" + "syntheticvalue1234567890"),
+        ("slack_bot_token", "xoxb-1234567890-synthetic"),
+        ("client_secret", "synthetic-client-secret-value"),
+        ("aws_session_token", "synthetic-aws-session-token-value"),
+    ],
+)
+def test_ai_provider_rejects_additional_credentials_before_outbound_call(
+    name,
+    secret,
+):
+    provider = TrackingProvider()
+
+    with pytest.raises(AIRequestSecurityError):
+        provider.generate(AIRequest("Generate docs", {name: secret}))
+
+    assert provider.called is False
+
+
 def test_ai_provider_rejects_custom_object_without_stringifying_it():
     provider = TrackingProvider()
 

@@ -158,6 +158,60 @@ example-private-key-material
     assert result.contains_private_key is True
 
 
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("STRIPE_SECRET_KEY", "sk_" + "live_" + "syntheticvalue1234567890"),
+        ("SLACK_BOT_TOKEN", "xoxb-1234567890-synthetic"),
+        ("CLIENT_SECRET", "synthetic-client-secret-value"),
+        ("SECRET", "synthetic-generic-secret-value"),
+        ("AWS_SESSION_TOKEN", "synthetic-aws-session-token-value"),
+    ],
+)
+def test_detects_and_redacts_additional_credential_assignments(
+    scanner,
+    name,
+    value,
+):
+    result = scanner.scan(f'{name} = "{value}"')
+
+    assert value not in result.redacted_content
+    assert "[REDACTED]" in result.redacted_content
+    assert result.findings
+
+
+def test_redacted_credential_placeholder_is_not_a_new_finding(scanner):
+    result = scanner.scan('api_key = "[REDACTED]"')
+
+    assert result.findings == []
+    assert result.redacted_content == 'api_key = "[REDACTED]"'
+
+
+def test_detects_and_redacts_unassigned_provider_tokens(scanner):
+    stripe_key = "sk_" + "live_" + "syntheticvalue1234567890"
+    slack_token = "xoxb-1234567890-synthetic"
+
+    result = scanner.scan(f"{stripe_key}\n{slack_token}")
+
+    assert stripe_key not in result.redacted_content
+    assert slack_token not in result.redacted_content
+    assert "Stripe API key" in result.findings
+    assert "Slack token" in result.findings
+
+
+def test_detects_encrypted_private_key_material(scanner):
+    content = (
+        "-----BEGIN ENCRYPTED PRIVATE KEY-----\n"
+        "synthetic-encrypted-private-key-material\n"
+        "-----END ENCRYPTED PRIVATE KEY-----"
+    )
+
+    result = scanner.scan(content)
+
+    assert result.contains_private_key is True
+    assert "synthetic-encrypted-private-key-material" not in result.redacted_content
+
+
 def test_clean_aws_documentation_is_preserved(scanner):
     content = """
 AWS_ACCESS_KEY_ID is an environment variable.

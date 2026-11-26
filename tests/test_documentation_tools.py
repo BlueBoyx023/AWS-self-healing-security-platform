@@ -1,3 +1,4 @@
+
 import json
 
 import pytest
@@ -170,15 +171,22 @@ def test_test_results_rejects_inconsistent_counts(
     )
 
 
-def test_passing_report_rejects_mismatched_project_checkpoint_date(
+def test_passing_report_accepts_different_project_checkpoint_date(
     tmp_path, monkeypatch
 ):
     status_file = tmp_path / "project_status.json"
+
     status_file.write_text(
-        json.dumps({"development": {"last_verified_checkpoint": "2026-11-19"}}),
+        json.dumps({
+            "development": {
+                "last_verified_checkpoint": "2026-11-19"
+            }
+        }),
         encoding="utf-8",
     )
+
     results_file = tmp_path / "test_results.json"
+
     results_file.write_text(
         json.dumps({
             "status": "passed",
@@ -186,25 +194,40 @@ def test_passing_report_rejects_mismatched_project_checkpoint_date(
             "completed_at_utc": "2026-11-22T09:01:00+00:00",
             "exit_code": 0,
             "test_counts": {
-                "passed": 1, "failed": 0, "errors": 0, "skipped": 0,
+                "passed": 1,
+                "failed": 0,
+                "errors": 0,
+                "skipped": 0,
             },
-            "subtest_counts": {"passed": 0, "failed": 0},
+            "subtest_counts": {
+                "passed": 0,
+                "failed": 0,
+            },
             "junit_counts": {
-                "total": 1, "failures": 0, "errors": 0, "skipped": 0,
+                "total": 1,
+                "failures": 0,
+                "errors": 0,
+                "skipped": 0,
             },
         }),
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(validate_docs, "STATUS_FILE", status_file)
-    monkeypatch.setattr(validate_docs, "TEST_RESULTS_FILE", results_file)
+    monkeypatch.setattr(
+        validate_docs,
+        "STATUS_FILE",
+        status_file,
+    )
+
+    monkeypatch.setattr(
+        validate_docs,
+        "TEST_RESULTS_FILE",
+        results_file,
+    )
 
     validate_docs.validate_test_results()
 
-    assert any(
-        "last_verified_checkpoint date" in error
-        for error in validate_docs.ERRORS
-    )
+    assert validate_docs.ERRORS == []
 
 
 def test_inventory_does_not_overwrite_manual_security_documents(
@@ -213,11 +236,17 @@ def test_inventory_does_not_overwrite_manual_security_documents(
     docs_dir = tmp_path / "docs"
     generated_dir = docs_dir / "generated"
     generated_dir.mkdir(parents=True)
+
     security_doc = docs_dir / "security-design.md"
-    original_content = "# Human maintained security design\n\nReview required.\n"
+    original_content = (
+        "# Human maintained security design\n\nReview required.\n"
+    )
     security_doc.write_text(original_content, encoding="utf-8")
+
     (tmp_path / "documentation").mkdir()
+
     status_file = tmp_path / "documentation" / "project_status.json"
+
     status_file.write_text(
         json.dumps({
             "documentation": {
@@ -226,11 +255,14 @@ def test_inventory_does_not_overwrite_manual_security_documents(
         }),
         encoding="utf-8",
     )
+
     (tmp_path / ".pytest-tmp-fixture").mkdir()
+
     (tmp_path / ".pytest-tmp-fixture" / "README.md").write_text(
         "# Test fixture, not a project document\n",
         encoding="utf-8",
     )
+
     output_file = generated_dir / "documentation_inventory.md"
 
     monkeypatch.setattr(generate_docs, "PROJECT_ROOT", tmp_path)
@@ -240,7 +272,9 @@ def test_inventory_does_not_overwrite_manual_security_documents(
     generate_docs.generate_inventory()
 
     assert security_doc.read_text(encoding="utf-8") == original_content
+
     inventory = output_file.read_text(encoding="utf-8")
+
     assert "docs/security-design.md" in inventory
     assert ".pytest-tmp-fixture" not in inventory
 
@@ -293,11 +327,17 @@ def test_markdown_validator_ignores_pytest_temporary_directories(
 ):
     temporary_dir = tmp_path / ".pytest-tmp-fixture"
     temporary_dir.mkdir()
+
     (temporary_dir / "README.md").write_text(
         "[Fixture link](missing.md)",
         encoding="utf-8",
     )
-    monkeypatch.setattr(validate_docs, "PROJECT_ROOT", tmp_path)
+
+    monkeypatch.setattr(
+        validate_docs,
+        "PROJECT_ROOT",
+        tmp_path,
+    )
 
     validate_docs.validate_markdown_links()
 

@@ -76,6 +76,7 @@ def test_main_creates_default_openai_provider(monkeypatch, capsys):
                 "context_summary": {},
                 "draft": SimpleNamespace(content="# Overview\nDraft."),
                 "review": SimpleNamespace(approved=True, issues=[], warnings=[]),
+                "eligible_for_human_review": True,
             }
 
     monkeypatch.setattr(cli_module, "OpenAIProvider", create_provider)
@@ -108,6 +109,7 @@ def test_main_runs_successfully(monkeypatch, capsys):
         "draft": SimpleNamespace(
             content="# Overview\nGenerated documentation."
         ),
+        "eligible_for_human_review": True,
         "review": SimpleNamespace(
             approved=True,
             issues=[],
@@ -193,6 +195,7 @@ def test_main_reports_review_issues_and_warnings(monkeypatch, capsys):
             return {
                 "context_summary": {},
                 "draft": SimpleNamespace(content="# Overview\nDraft."),
+                "eligible_for_human_review": True,
                 "review": SimpleNamespace(
                     approved=False,
                     issues=["Missing required section: Testing"],
@@ -224,6 +227,7 @@ def test_main_does_not_save_documentation(monkeypatch, capsys):
             return {
                 "context_summary": {},
                 "draft": SimpleNamespace(content="# Overview\nDraft."),
+                "eligible_for_human_review": True,
                 "review": SimpleNamespace(
                     approved=True,
                     issues=[],
@@ -252,6 +256,7 @@ def test_main_returns_zero_when_review_has_warnings(monkeypatch):
             return {
                 "context_summary": {},
                 "draft": SimpleNamespace(content="# Overview\nDraft."),
+                "eligible_for_human_review": True,
                 "review": SimpleNamespace(
                     approved=True,
                     issues=[],
@@ -268,3 +273,45 @@ def test_main_returns_zero_when_review_has_warnings(monkeypatch):
     result = main([], provider=MockProvider())
 
     assert result == 0
+
+
+@pytest.mark.parametrize("eligibility", [False, None])
+def test_main_blocks_ineligible_draft_and_shows_diagnostics(
+    monkeypatch,
+    capsys,
+    eligibility,
+):
+    class FakeOrchestrator:
+        def __init__(self, **kwargs):
+            pass
+
+        def run(self, document_type):
+            result = {
+                "context_summary": {},
+                "draft": SimpleNamespace(
+                    content="# Output validation failed\nGenerated content was withheld."
+                ),
+                "validation_failures":["Generated output could not be security validated."],
+                "output_validation": SimpleNamespace(
+                    issues=["Generated output could not be security validated."],
+                ),
+                "review": SimpleNamespace(
+                    approved=False,
+                    issues=["Generated output could not be security validated."],
+                    warnings=[],
+                ),
+            }
+            if eligibility is not None:
+                result["eligible_for_human_review"] = eligibility
+            return result
+
+    monkeypatch.setattr(cli_module, "DevDocOrchestrator", FakeOrchestrator)
+
+    result = main([], provider=MockProvider())
+    output = capsys.readouterr().out
+
+    assert result == 1
+    assert "BLOCKED: OUTPUT NOT ELIGIBLE FOR HUMAN REVIEW" in output
+    assert "Generated output could not be security validated." in output
+    assert "BLOCKED OUTPUT (DIAGNOSTIC ONLY)" in output
+    assert "GENERATED DOCUMENTATION DRAFT" not in output

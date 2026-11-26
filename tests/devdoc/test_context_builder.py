@@ -254,6 +254,29 @@ def test_context_builder_skips_private_key_file(tmp_path):
     )
 
 
+def test_context_builder_skips_encrypted_private_key_file(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".git").mkdir()
+    (repo / "config.py").write_text(
+        "-----BEGIN ENCRYPTED PRIVATE KEY-----\n"
+        "synthetic-encrypted-key-material\n"
+        "-----END ENCRYPTED PRIVATE KEY-----",
+        encoding="utf-8",
+    )
+
+    result = ContextBuilder(repo).build({
+        "classifications": [
+            {"path": "config.py", "status": "modified", "categories": []}
+        ],
+    })
+
+    assert result["files"] == []
+    assert result["skipped_files"][0]["reason"] == (
+        "File contains private-key material."
+    )
+
+
 def test_context_builder_redacts_github_token(tmp_path):
     from scripts.devdoc.context_builder import ContextBuilder
 
@@ -307,3 +330,31 @@ def test_context_builder_never_returns_detected_secret(tmp_path):
     })
 
     assert secret not in str(result)
+
+
+@pytest.mark.parametrize(
+    ("name", "secret"),
+    [
+        ("STRIPE_SECRET_KEY", "sk_" + "live_" + "syntheticvalue1234567890"),
+        ("SLACK_BOT_TOKEN", "xoxb-1234567890-synthetic"),
+        ("CLIENT_SECRET", "synthetic-client-secret-value"),
+        ("AWS_SESSION_TOKEN", "synthetic-aws-session-token-value"),
+    ],
+)
+def test_context_builder_redacts_additional_credentials(tmp_path, name, secret):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".git").mkdir()
+    (repo / "config.py").write_text(
+        f'{name} = "{secret}"',
+        encoding="utf-8",
+    )
+
+    result = ContextBuilder(repo).build({
+        "classifications": [
+            {"path": "config.py", "status": "modified", "categories": []}
+        ],
+    })
+
+    assert secret not in str(result)
+    assert "[REDACTED]" in result["files"][0]["content"]
