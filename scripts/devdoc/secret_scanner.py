@@ -21,13 +21,13 @@ class SecretScanner:
     )
 
     PRIVATE_KEY_BEGIN = re.compile(
-        r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"
+        r"-----BEGIN (?:(?:RSA |EC |OPENSSH |DSA )?)(?:ENCRYPTED )?PRIVATE KEY-----"
     )
 
     PRIVATE_KEY_BLOCK = re.compile(
-        r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"
+        r"-----BEGIN (?:(?:RSA |EC |OPENSSH |DSA )?)(?:ENCRYPTED )?PRIVATE KEY-----"
         r".*?"
-        r"-----END (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----",
+        r"-----END (?:(?:RSA |EC |OPENSSH |DSA )?)(?:ENCRYPTED )?PRIVATE KEY-----",
         re.DOTALL,
     )
     DATABASE_URL = re.compile(
@@ -39,8 +39,25 @@ class SecretScanner:
     JWT = re.compile(
         r"(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])"
     )
+    STRIPE_KEY = re.compile(
+        r"\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b"
+    )
+    SLACK_TOKEN = re.compile(
+        r"\b(?:xox[baprs]-|xapp-)[A-Za-z0-9-]{10,}\b"
+    )
+    GENERIC_CREDENTIAL_ASSIGNMENT = re.compile(
+        r"""(?i)(["']?(?:[a-z0-9]+[_-])*(?:client[_-]?secret|secret(?:[_-]?key)?|api[_-]?key|(?:(?:access|refresh|oauth|auth|session|bot)[_-]?)?token|password|passwd|pwd|credentials?)["']?\s*[:=]\s*)(?:\\?["']([^"'\\\r\n]{8,})\\?["']|([^\s,;#}]{8,}))"""
+    )
 
     PATTERNS = [
+        (
+            "Stripe API key",
+            STRIPE_KEY,
+        ),
+        (
+            "Slack token",
+            SLACK_TOKEN,
+        ),
         (
             "OAuth token",
             re.compile(
@@ -79,6 +96,10 @@ class SecretScanner:
                 r"(?i)(\bBearer\s+)[A-Za-z0-9._~+/=-]{16,}"
             ),
         ),
+        (
+            "Credential assignment",
+            GENERIC_CREDENTIAL_ASSIGNMENT,
+        ),
     ]
 
     def scan(self, content: str) -> SecretScanResult:
@@ -98,7 +119,7 @@ class SecretScanner:
             # If no matching END marker exists, discard all remaining text
             # after BEGIN because it may be partial key material.
             sanitized = re.sub(
-                r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----.*$",
+                r"-----BEGIN (?:(?:RSA |EC |OPENSSH |DSA )?)(?:ENCRYPTED )?PRIVATE KEY-----.*$",
                 self.REDACTED,
                 sanitized,
                 flags=re.DOTALL,
@@ -125,7 +146,17 @@ class SecretScanner:
             )
 
         for description, pattern in self.PATTERNS:
-            if not pattern.search(sanitized):
+            matches = list(pattern.finditer(sanitized))
+            if not matches:
+                continue
+
+            if description == "Credential assignment" and not any(
+                any(
+                    value is not None and value != self.REDACTED
+                    for value in match.groups()[1:]
+                )
+                for match in matches
+            ):
                 continue
 
             findings.append(description)
@@ -163,6 +194,15 @@ class SecretScanner:
                     lambda match: match.group(1) + self.REDACTED,
                     sanitized,
                 )
+
+            elif description == "Credential assignment":
+                def redact_credential(match):
+                    value = match.group(2) or match.group(3)
+                    if value == self.REDACTED:
+                        return match.group(0)
+                    return match.group(0).replace(value, self.REDACTED, 1)
+
+                sanitized = pattern.sub(redact_credential, sanitized)
 
             else:
                 sanitized = pattern.sub(

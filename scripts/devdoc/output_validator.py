@@ -31,8 +31,14 @@ class OutputValidator:
     }
     UNSAFE_COMMAND_BODY = (
         r"(?:sudo\s+|powershell(?:\.exe)?\s+|pwsh\s+|cmd(?:\.exe)?\s+/c\s+|"
-        r"bash\s+-c\s+|curl\s+[^\n|]*\|\s*(?:sh|bash)|"
-        r"rm\s+-rf\s+|aws\s+(?:iam\s+create|s3\s+rm|ec2\s+terminate)|"
+        r"bash\s+-c\s+|python(?:3(?:\.\d+)?)?\s+-c\s+|"
+        r"curl\s+[^\n|]*\|\s*(?:sh|bash)|"
+        r"rm\s+-(?=[a-z]*r)(?=[a-z]*f)[a-z]+\s+|"
+        r"(?:terraform|tofu)\s+(?:destroy|apply)\b|"
+        r"docker\s+run\b[^\n]*--privileged|"
+        r"kubectl\s+delete\b|"
+        r"aws\s+(?:iam\s+(?:create|delete|put)|s3\s+rm|ec2\s+terminate|"
+        r"secretsmanager\s+delete-secret)|"
         r"(?:chmod\s+777|mkfs(?:\.|\s)|dd\s+if=))"
     )
     UNSAFE_COMMAND_LINE = re.compile(
@@ -54,6 +60,21 @@ class OutputValidator:
         r"(?:(?!\b(?:run|execute)\b)[^:!?;.\n]){0,120}:\s*`?"
         + UNSAFE_COMMAND_BODY,
         re.IGNORECASE,
+    )
+    SUSPICIOUS_INSTRUCTION_PATTERNS = (
+        re.compile(
+            r"\b(?:ignore|disregard|override|forget)\s+"
+            r"(?:(?:all|any|the)\s+)?"
+            r"(?:previous|prior|system|developer|task|above)\s+"
+            r"(?:instructions?|prompts?)\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\b(?:reveal|disclose|print|dump|exfiltrate|send)\s+"
+            r"(?:(?:all|the|any)\s+)?"
+            r"(?:secrets?|credentials?|api keys?|tokens?)\b",
+            re.IGNORECASE,
+        ),
     )
     NEGATED_EXECUTION = re.compile(
         r"(?:\bdo\s+not|\bdon't|\bdont|\bnever|"
@@ -148,6 +169,10 @@ class OutputValidator:
 
         if self._contains_unsafe_command(safe_content):
             issues.append("Generated output contains a potentially unauthorized command.")
+        if self._contains_suspicious_instruction(safe_content):
+            issues.append(
+                "Generated output contains a suspicious instruction or credential-disclosure request."
+            )
 
         return OutputValidationResult(
             valid=not issues,
@@ -421,3 +446,12 @@ class OutputValidator:
                     return True
 
         return False
+
+    @classmethod
+    def _contains_suspicious_instruction(cls, content):
+        """Block common prompt-injection and credential-disclosure phrases."""
+
+        return any(
+            pattern.search(content)
+            for pattern in cls.SUSPICIOUS_INSTRUCTION_PATTERNS
+        )
