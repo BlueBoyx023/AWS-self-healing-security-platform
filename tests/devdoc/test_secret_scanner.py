@@ -148,6 +148,23 @@ example-private-key-material
     assert result.contains_private_key is True
 
 
+@pytest.mark.parametrize("key_type", ["EC", "OPENSSH", "DSA"])
+def test_detects_and_redacts_additional_private_key_formats(scanner, key_type):
+    material = f"synthetic-{key_type.lower()}-private-key-material"
+    content = (
+        f"-----BEGIN {key_type} PRIVATE KEY-----\n"
+        f"{material}\n"
+        f"-----END {key_type} PRIVATE KEY-----"
+    )
+
+    result = scanner.scan(content)
+
+    assert result.contains_private_key is True
+    assert "Private key material" in result.findings
+    assert "[REDACTED]" in result.redacted_content
+    assert material not in result.redacted_content
+
+
 def test_detects_incomplete_private_key_block(scanner):
     content = """
 -----BEGIN RSA PRIVATE KEY-----
