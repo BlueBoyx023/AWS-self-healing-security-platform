@@ -226,6 +226,10 @@ Use IAM roles instead of storing credentials.
 @pytest.mark.parametrize("value", [
     "postgresql://dev_user:synthetic-password@db.example.test:5432/app",
     "mysql://dev_user:synthetic-password@db.example.test/app",
+    "mariadb://dev_user:synthetic-password@db.example.test:3306/app",
+    "mongodb://dev_user:synthetic-password@db.example.test:27017/app?authSource=admin",
+    "mongodb+srv://dev_user:synthetic-password@cluster.example.test/app?retryWrites=true&w=majority",
+    "redis://dev_user:synthetic-password@cache.example.test:6379/0",
 ])
 def test_detects_and_redacts_database_connection_credentials(scanner, value):
     result = scanner.scan(value)
