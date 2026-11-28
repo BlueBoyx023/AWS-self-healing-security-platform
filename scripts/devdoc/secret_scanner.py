@@ -110,6 +110,12 @@ class SecretScanner:
         findings = []
         contains_private_key = False
 
+        def is_redacted_placeholder(value):
+            return re.fullmatch(
+                re.escape(self.REDACTED) + r"\W*",
+                value,
+            ) is not None
+
         # Detect complete or incomplete private-key blocks.
         if self.PRIVATE_KEY_BEGIN.search(sanitized):
             contains_private_key = True
@@ -161,7 +167,7 @@ class SecretScanner:
 
             if description == "Credential assignment" and not any(
                 any(
-                    value is not None and value != self.REDACTED
+                    value is not None and not is_redacted_placeholder(value)
                     for value in match.groups()[1:]
                 )
                 for match in matches
@@ -207,7 +213,7 @@ class SecretScanner:
             elif description == "Credential assignment":
                 def redact_credential(match):
                     value = match.group(2) or match.group(3)
-                    if value == self.REDACTED:
+                    if is_redacted_placeholder(value):
                         return match.group(0)
                     return match.group(0).replace(value, self.REDACTED, 1)
 

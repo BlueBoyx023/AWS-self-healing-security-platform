@@ -109,10 +109,11 @@ def test_rejects_non_string_content(scanner):
         scanner.scan(123)
 
 
-def test_empty_content_is_valid(scanner):
-    result = scanner.scan("")
+@pytest.mark.parametrize("content", ["", " \t\r\n"])
+def test_empty_or_whitespace_content_is_valid(scanner, content):
+    result = scanner.scan(content)
 
-    assert result.redacted_content == ""
+    assert result.redacted_content == content
     assert result.findings == []
 
 
@@ -285,6 +286,71 @@ def test_incomplete_private_key_redacts_following_material(scanner):
     assert result.contains_private_key
     assert "synthetic-private-key-material" not in result.redacted_content
     assert "other bytes" not in result.redacted_content
+
+
+def test_multiple_mixed_quoted_and_unquoted_password_assignments(scanner):
+    content = (
+        'password="synthetic-quoted-password", '
+        "password=synthetic-unquoted-password;"
+    )
+
+    result = scanner.scan(content)
+
+    assert result.redacted_content == (
+        'password="[REDACTED]", password=[REDACTED];'
+    )
+    assert result.findings == ["Password assignment"]
+
+
+def test_redaction_preserves_punctuation_adjacent_to_credential_assignment(scanner):
+    content = "Config (api_key=synthetic-api-key-12345), complete."
+
+    result = scanner.scan(content)
+
+    assert result.redacted_content == "Config (api_key=[REDACTED]), complete."
+    assert result.findings == ["Generic API key"]
+
+    rescanned = scanner.scan(result.redacted_content)
+
+    assert rescanned.redacted_content == result.redacted_content
+    assert rescanned.findings == []
+
+
+def test_multiple_api_key_assignments_are_redacted_and_stable(scanner):
+    first_key = "synthetic-first-api-key-12345"
+    second_key = "synthetic-second-api-key-67890"
+    content = (
+        f"Before (api_key={first_key}), "
+        f"api_key='{second_key}'; after."
+    )
+    expected = (
+        "Before (api_key=[REDACTED]), "
+        "api_key='[REDACTED]'; after."
+    )
+
+    result = scanner.scan(content)
+
+    assert result.redacted_content == expected
+    assert first_key not in result.redacted_content
+    assert second_key not in result.redacted_content
+    assert result.findings == ["Generic API key"]
+
+    rescanned = scanner.scan(result.redacted_content)
+
+    assert rescanned.redacted_content == expected
+    assert rescanned.findings == []
+
+
+def test_benign_credential_field_prose_is_preserved(scanner):
+    content = (
+        "The password field is optional. "
+        "API key values belong in a secret manager."
+    )
+
+    result = scanner.scan(content)
+
+    assert result.redacted_content == content
+    assert result.findings == []
 
 
 def test_redacted_password_is_stable_when_scanned_again(scanner):
