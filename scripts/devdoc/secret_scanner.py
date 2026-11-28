@@ -147,6 +147,15 @@ class SecretScanner:
 
         for description, pattern in self.PATTERNS:
             matches = list(pattern.finditer(sanitized))
+
+            if description == "Password assignment":
+                matches = [
+                    match
+                    for match in matches
+                    if self.REDACTED
+                    not in (match.group(2), match.group(3), match.group(4))
+                ]
+
             if not matches:
                 continue
 

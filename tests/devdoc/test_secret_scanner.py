@@ -63,6 +63,7 @@ def test_detects_and_redacts_password(scanner):
     result = scanner.scan(f'password = "{secret}"')
 
     assert secret not in result.redacted_content
+    assert "Password assignment" in result.findings
 
 
 def test_detects_and_redacts_bearer_token(scanner):
@@ -284,3 +285,44 @@ def test_incomplete_private_key_redacts_following_material(scanner):
     assert result.contains_private_key
     assert "synthetic-private-key-material" not in result.redacted_content
     assert "other bytes" not in result.redacted_content
+
+
+def test_redacted_password_is_stable_when_scanned_again(scanner):
+    content = "Deploy password=\"synthetic-deploy-password\" after approval."
+
+    result = scanner.scan(content)
+
+    assert result.redacted_content == 'Deploy password="[REDACTED]" after approval.'
+    assert "synthetic-deploy-password" not in result.redacted_content
+
+    rescanned = scanner.scan(result.redacted_content)
+
+    assert rescanned.redacted_content == result.redacted_content
+    assert rescanned.findings == []
+
+
+def test_multiple_redacted_credential_types_remain_stable_across_scans(scanner):
+    aws_key = "AKIAIOSFODNN7EXAMPLE"
+    github_token = "ghp_" + ("D" * 36)
+    content = (
+        f"Before service config: AWS={aws_key}; GitHub={github_token}. "
+        "Rollout approved after review."
+    )
+    expected = (
+        "Before service config: AWS=[REDACTED]; GitHub=[REDACTED]. "
+        "Rollout approved after review."
+    )
+
+    result = scanner.scan(content)
+
+    assert result.redacted_content == expected
+    assert aws_key not in result.redacted_content
+    assert github_token not in result.redacted_content
+
+    rescanned_content = result.redacted_content
+    for _ in range(3):
+        rescanned = scanner.scan(rescanned_content)
+
+        assert rescanned.redacted_content == expected
+        assert rescanned.findings == []
+        rescanned_content = rescanned.redacted_content
